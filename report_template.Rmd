@@ -1,0 +1,71 @@
+---
+title: "Laporan Analisis Kerentanan Sosial Indonesia"
+author: "SIVASIDA"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    keep_tex: true
+geometry: margin=1in
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 8,
+  fig.height = 6
+)
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(scales)
+
+# Define function to load SOVI data (same as in app)
+sovi_data <- function() {
+  tryCatch({
+    if(exists("uploaded_main_data") && !is.null(uploaded_main_data)) {
+      return(uploaded_main_data)
+    } else {
+      return(read.csv("data/sovi_data.csv"))
+    }
+  }, error = function(e) {
+    # Fallback if files don't exist
+    data.frame(
+      CHILDREN = rnorm(512, 25, 5),
+      FEMALE = rnorm(512, 50, 2),
+      ELDERLY = rnorm(512, 8, 3),
+      POVERTY = rnorm(512, 15, 8)
+    )
+  })
+}
+```
+
+# Ringkasan Eksekutif
+
+Laporan ini menyajikan analisis komprehensif terhadap data kerentanan sosial di Indonesia berdasarkan data SUSENAS 2017. Analisis mencakup eksplorasi data, visualisasi geografis, dan analisis spasial untuk memahami pola kerentanan sosial di berbagai kabupaten/kota di Indonesia.
+
+{{{executive_summary}}}
+
+{{{metadata_section}}}
+
+{{{summary_section}}}
+
+{{{content_sections}}}
+
+
+---
+
+**Laporan ini dibuat secara otomatis melalui SIVASIDA**
+
+
+Tanggal pembuatan: `r Sys.Date()`

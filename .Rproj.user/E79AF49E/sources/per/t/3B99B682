@@ -1,0 +1,28 @@
+{
+    "id": "3B99B682",
+    "path": "E:/Kegiatan-Perkuliahan/komputasi-statistik/uas/rshiny-project-uas/ui.R",
+    "project_path": "ui.R",
+    "type": "r_source",
+    "hash": "4061711356",
+    "contents": "",
+    "dirty": false,
+    "created": 1752841231391.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "14,0",
+        "scrollLine": "0",
+        "docOutlineVisible": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1752936910,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1752936910,
+    "read_only": false,
+    "read_only_alternatives": []
+}
