@@ -50,7 +50,7 @@ ui <- dashboardPage(
               fluidRow(
                 box(
                   title = "Profil Dashboard", status = "primary", solidHeader = TRUE, width = 12,
-                  h3("Simple Vulnerability Analysis Shiny Dashboard Indonesia"),
+                  h3("Simple Social Vulnerability Analysis Shiny Dashboard Indonesia"),
                   br(),
                   h4("Deskripsi Data:"),
                   p("Dataset ini berisi informasi tentang kerentanan sosial di Indonesia berdasarkan Survei Sosial Ekonomi Nasional (SUSENAS) 2017 oleh BPS-Statistics Indonesia."),
