@@ -703,7 +703,7 @@ ui <- dashboardPage(
                            h5("Aksi Laporan:"),
                            actionButton("clear_report", "Bersihkan Laporan", class = "btn-warning"),
                            br(), br(),
-                           downloadButton("download_pdf_report", "Download PDF", class = "btn-success")
+                           downloadButton("download_doc_report", "Download Laporan Gabungan (.doc)", class = "btn-success")
                     ),
                     column(6,
                            h5("Opsi Laporan:"),
@@ -713,7 +713,7 @@ ui <- dashboardPage(
                     )
                   ),
                   br(),
-                  p("Laporan akan dihasilkan dalam format PDF dengan semua hasil analisis dan interpretasi yang telah ditambahkan.")
+                  p("Laporan akan dihasilkan dalam format Doc dengan semua hasil analisis dan interpretasi yang telah ditambahkan.")
                 )
               )
       )

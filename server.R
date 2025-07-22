@@ -20,7 +20,7 @@ library(geojsonio)
 library(RColorBrewer)
 library(rmarkdown)
 library(knitr)
-library(tinytex) # Pastikan TinyTeX di-load untuk PDF
+library(viridis)
 
 server <- function(input, output, session) {
   # Register cleanup function to run when session ends (connection lost)
@@ -1265,656 +1265,659 @@ server <- function(input, output, session) {
   })
 
   # =================
-  # REPORT MANAGEMENT
-  # =================
+# REPORT MANAGEMENT
+# =================
 
-  # Add exploration analysis to report
-  observeEvent(input$add_exploration_to_report, {
-    req(input$x_var, input$plot_type)
+# Add exploration analysis to report
+observeEvent(input$add_exploration_to_report, {
+  req(input$x_var, input$plot_type)
 
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("exploration_", report_items$counter)
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("exploration_", report_items$counter)
 
-    # Get current interpretation from the actual output
-    interpretation <- isolate({
-      data <- sovi_data()
-      var_name <- input$x_var
+  # Get current interpretation from the actual output
+  interpretation <- isolate({
+    data <- sovi_data()
+    var_name <- input$x_var
 
-      if (!is.null(var_name) && var_name %in% names(data)) {
-        var_data <- data[[var_name]]
-        var_data <- var_data[!is.na(var_data)]
+    if (!is.null(var_name) && var_name %in% names(data)) {
+      var_data <- data[[var_name]]
+      var_data <- var_data[!is.na(var_data)]
 
-        # Calculate actual statistics
-        mean_val <- round(mean(var_data), 4)
-        median_val <- round(median(var_data), 4)
-        sd_val <- round(sd(var_data), 4)
-        min_val <- round(min(var_data), 4)
-        max_val <- round(max(var_data), 4)
+      # Calculate actual statistics
+      mean_val <- round(mean(var_data), 4)
+      median_val <- round(median(var_data), 4)
+      sd_val <- round(sd(var_data), 4)
+      min_val <- round(min(var_data), 4)
+      max_val <- round(max(var_data), 4)
 
-        # Determine skewness
-        skewness_val <- (mean_val - median_val) / sd_val
-        skewness_desc <- if (abs(skewness_val) < 0.1) {
-          "relatif simetris"
-        } else if (skewness_val > 0.1) {
-          "condong ke kanan (right-skewed)"
-        } else {
-          "condong ke kiri (left-skewed)"
+      # Determine skewness
+      skewness_val <- (mean_val - median_val) / sd_val
+      skewness_desc <- if (abs(skewness_val) < 0.1) {
+        "relatif simetris"
+      } else if (skewness_val > 0.1) {
+        "condong ke kanan (right-skewed)"
+      } else {
+        "condong ke kiri (left-skewed)"
+      }
+
+      # Create comprehensive interpretation based on plot type
+      plot_desc <- switch(input$plot_type,
+        "Histogram" = "Histogram menunjukkan distribusi frekuensi data",
+        "Boxplot" = "Boxplot menampilkan ringkasan lima angka dan outlier",
+        "Density Plot" = "Density plot menampilkan estimasi distribusi probabilitas",
+        "Scatter Plot" = paste("Scatter plot menunjukkan hubungan antara", input$x_var, "dan", input$y_var)
+      )
+
+      # Create plot with new helper function
+      plot_filename <- paste0("exploration_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", var_name), "_", gsub("[^A-Za-z0-9]", "_", input$plot_type), ".png")
+      # Asumsi create_plot_path menghasilkan path relatif, e.g., "temp_plots/namafile.png"
+      plot_paths <- create_plot_path(plot_filename)
+
+      # Generate plot code
+      plot_code <- quote({
+        if (!is.null(par("mfrow"))) {
+          if (!all(par("mfrow") == c(1, 1))) {
+            par(mfrow = c(1, 1)) # Reset to single plot
+          }
         }
 
-        # Create comprehensive interpretation based on plot type
-        plot_desc <- switch(input$plot_type,
-          "Histogram" = "Histogram menunjukkan distribusi frekuensi data",
-          "Boxplot" = "Boxplot menampilkan ringkasan lima angka dan outlier",
-          "Density Plot" = "Density plot menampilkan estimasi distribusi probabilitas",
-          "Scatter Plot" = paste("Scatter plot menunjukkan hubungan antara", input$x_var, "dan", input$y_var)
-        )
+        var_name <- input$x_var
+        var_data <- data[[var_name]]
+        var_data <- var_data[!is.na(var_data)] # Remove NA values
 
-        # Create plot with new helper function
-        plot_filename <- paste0("exploration_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", var_name), "_", gsub("[^A-Za-z0-9]", "_", input$plot_type), ".png")
+        if (input$plot_type == "Histogram") {
+          hist(var_data, main = paste("Histogram of", var_name), xlab = var_name, col = "lightblue", border = "white", breaks = 30)
+        } else if (input$plot_type == "Boxplot") {
+          boxplot(var_data, main = paste("Boxplot of", var_name), ylab = var_name, col = "lightblue")
+        } else if (input$plot_type == "Density Plot") {
+          plot(density(var_data, na.rm = TRUE), main = paste("Density Plot of", var_name), xlab = var_name)
+          polygon(density(var_data, na.rm = TRUE), col = "lightblue", border = "blue")
+        } else if (input$plot_type == "Scatter Plot" && !is.null(input$y_var)) {
+          y_data <- data[[input$y_var]]
+          y_data <- y_data[!is.na(y_data)] # Remove NA values
+          plot(var_data, y_data,
+            xlab = var_name, ylab = input$y_var,
+            main = paste("Scatter Plot:", var_name, "vs", input$y_var),
+            pch = 16, col = "steelblue"
+          )
+          abline(lm(y_data ~ var_data), col = "red")
+        } else { # Fallback
+          hist(var_data, main = paste("Histogram of", var_name), xlab = var_name, col = "lightblue", border = "white", breaks = 30)
+        }
+      })
+
+      # Save plot safely
+      plot_success <- save_plot_safely(plot_paths, plot_code)
+
+      content <- paste0(
+        "## Eksplorasi Data: ", var_name, "\n\n",
+        "**Jenis Visualisasi:** ", input$plot_type, "\n\n",
+        if (plot_success) {
+          # Path relatif akan bekerja untuk Word
+          paste0("![", input$plot_type, " untuk variabel ", var_name, "](", plot_paths$latex_path, ")\n\n")
+        } else {
+          "**Error:** Plot tidak dapat dibuat.\n\n"
+        },
+        "**Statistik Deskriptif:**\n",
+        "- Rata-rata: ", mean_val, "\n",
+        "- Median: ", median_val, "\n",
+        "- Standar Deviasi: ", sd_val, "\n",
+        "- Minimum: ", min_val, "\n",
+        "- Maksimum: ", max_val, "\n",
+        "- Rentang: ", round(max_val - min_val, 4), "\n\n",
+        "**Karakteristik Distribusi:**\n",
+        "- Bentuk distribusi: ", skewness_desc, "\n",
+        "- Koefisien variasi: ", round((sd_val / mean_val) * 100, 2), "%\n\n",
+        "**Interpretasi Visualisasi:** ", plot_desc, ". ",
+        "Data menunjukkan distribusi yang ", skewness_desc, " dengan variabilitas ",
+        if ((sd_val / mean_val) < 0.2) "rendah" else if ((sd_val / mean_val) < 0.5) "sedang" else "tinggi",
+        ".\n\n"
+      )
+
+      # Add scatter plot specific interpretation
+      if (input$plot_type == "Scatter Plot" && !is.null(input$y_var)) {
+        y_data <- data[[input$y_var]]
+        if (length(var_data) == length(y_data)) {
+          correlation <- cor(var_data, y_data, use = "complete.obs")
+          cor_strength <- if (abs(correlation) < 0.3) "lemah" else if (abs(correlation) < 0.7) "sedang" else "kuat"
+          cor_direction <- if (correlation > 0) "positif" else "negatif"
+
+          content <- paste0(
+            content,
+            "**Analisis Korelasi:**\n",
+            "- Koefisien korelasi: ", round(correlation, 4), "\n",
+            "- Kekuatan hubungan: ", cor_strength, "\n",
+            "- Arah hubungan: ", cor_direction, "\n\n"
+          )
+        }
+      }
+
+      content
+    } else {
+      paste0(
+        "## Eksplorasi Data: ", input$x_var, "\n\n",
+        "Error: Variabel tidak ditemukan dalam dataset.\n\n"
+      )
+    }
+  })
+
+  report_items$content[[item_id]] <- list(
+    type = "exploration",
+    title = paste("Eksplorasi Data:", input$x_var),
+    content = interpretation,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Analisis eksplorasi berhasil ditambahkan ke laporan!", type = "message")
+})
+
+# Add spatial analysis to report (simplified)
+observeEvent(input$add_spatial_to_report, {
+  req(input$spatial_var1, input$spatial_var2, input$distance_threshold)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("spatial_", report_items$counter)
+
+  # Save spatial plot as PNG file first
+  plot_filename <- paste0("spatial_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$spatial_var1), "_vs_", gsub("[^A-Za-z0-9]", "_", input$spatial_var2), ".png")
+  plot_paths <- create_plot_path(plot_filename)
+
+  # Generate and save the spatial plot
+  plot_code <- quote({
+    if (!is.null(par("mfrow"))) {
+        if (!all(par("mfrow") == c(1, 1))) {
+            par(mfrow = c(1, 1)) # Reset to single plot
+        }
+    }
+    var1_data <- data[[input$spatial_var1]]
+    var2_data <- data[[input$spatial_var2]]
+    correlation <- cor(var1_data, var2_data, use = "complete.obs")
+
+    plot(var1_data, var2_data,
+      xlab = input$spatial_var1, ylab = input$spatial_var2,
+      main = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
+      pch = 16, col = "steelblue", cex = 0.8
+    )
+    abline(lm(var2_data ~ var1_data), col = "red", lwd = 2)
+    legend("topright", legend = paste("r =", round(correlation, 3)), bty = "n")
+  })
+
+  plot_success <- save_plot_safely(plot_paths, plot_code)
+
+  content <- paste0(
+    "## Analisis Spasial: ", input$spatial_var1, " vs ", input$spatial_var2, "\n\n",
+    if (plot_success) {
+      paste0("![Scatter Plot Analisis Spasial](", plot_paths$latex_path, ")\n\n")
+    } else {
+      "**Error:** Plot tidak dapat dibuat.\n\n"
+    },
+    "**Variabel 1:** ", input$spatial_var1, "\n",
+    "**Variabel 2:** ", input$spatial_var2, "\n",
+    "**Threshold Jarak:** ", input$distance_threshold, " km\n",
+    "**Korelasi:** ", round(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs"), 3), "\n\n",
+    "**Interpretasi:** Scatter plot menunjukkan hubungan spasial antara kedua variabel dengan mempertimbangkan threshold jarak ", input$distance_threshold, " km. Korelasi sebesar ", round(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs"), 3),
+    if (abs(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs")) > 0.7) " menunjukkan hubungan yang kuat." else if (abs(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs")) > 0.3) " menunjukkan hubungan yang sedang." else " menunjukkan hubungan yang lemah.", "\n\n"
+  )
+
+  report_items$content[[item_id]] <- list(
+    type = "spatial",
+    title = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Analisis spasial berhasil ditambahkan ke laporan! Download scatter plot secara terpisah.", type = "message")
+})
+
+
+
+# Add regression analysis to report
+observeEvent(input$add_regression_to_report, {
+  req(input$reg_response, input$reg_predictors)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("regression_", report_items$counter)
+
+  # Get regression results
+  interpretation <- isolate({
+    tryCatch(
+      {
+        data <- sovi_data()
+        if (!is.numeric(data[[input$reg_response]])) {
+          return("Error: Variabel respons harus numerik untuk regresi.")
+        }
+        if (length(input$reg_predictors) == 0) {
+          return("Error: Pilih setidaknya satu variabel prediktor.")
+        }
+        for (pred in input$reg_predictors) {
+          if (!is.numeric(data[[pred]])) {
+            return(paste0("Error: Prediktor '", pred, "' harus numerik."))
+          }
+        }
+
+        formula_str <- paste(input$reg_response, "~", paste(input$reg_predictors, collapse = " + "))
+        model <- lm(as.formula(formula_str), data = data)
+        model_summary <- summary(model)
+
+        r_squared <- model_summary$r.squared
+        f_stat <- model_summary$fstatistic
+        p_value <- pf(f_stat[1], f_stat[2], f_stat[3], lower.tail = FALSE)
+
+        coef_table <- model_summary$coefficients
+        sig_vars <- rownames(coef_table)[coef_table[, "Pr(>|t|)"] < 0.05]
+        sig_vars <- sig_vars[sig_vars != "(Intercept)"]
+
+        plot_filename <- paste0("regression_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$reg_response), ".png")
         plot_paths <- create_plot_path(plot_filename)
 
-        # Generate plot code
-        # Generate plot code - PERBAIKAN
         plot_code <- quote({
-          # Ensure par is reset after potential multi-plot layout from previous calls
-          if (!is.null(par("mfrow"))) {
-            if (all(par("mfrow") == c(1, 1))) {
-              # Do nothing, already 1x1
-            } else {
-              par(mfrow = c(1, 1)) # Reset to single plot
-            }
-          }
-
-          # Ambil data dan variabel dari environment (yang sudah disediakan oleh save_plot_safely)
-          var_name <- input$x_var
-          var_data <- data[[var_name]]
-          var_data <- var_data[!is.na(var_data)] # Remove NA values
-
-          if (input$plot_type == "Histogram") {
-            hist(var_data, main = paste("Histogram of", var_name), xlab = var_name, col = "lightblue", border = "white", breaks = 30)
-          } else if (input$plot_type == "Boxplot") {
-            boxplot(var_data, main = paste("Boxplot of", var_name), ylab = var_name, col = "lightblue")
-          } else if (input$plot_type == "Density Plot") {
-            plot(density(var_data, na.rm = TRUE), main = paste("Density Plot of", var_name), xlab = var_name)
-            polygon(density(var_data, na.rm = TRUE), col = "lightblue", border = "blue")
-          } else if (input$plot_type == "Scatter Plot" && !is.null(input$y_var)) {
-            y_data <- data[[input$y_var]]
-            y_data <- y_data[!is.na(y_data)] # Remove NA values
-            plot(var_data, y_data,
-              xlab = var_name, ylab = input$y_var,
-              main = paste("Scatter Plot:", var_name, "vs", input$y_var),
-              pch = 16, col = "steelblue"
-            )
-            abline(lm(y_data ~ var_data), col = "red")
-          } else { # Fallback for scatter if y_var is null, or other issues
-            hist(var_data, main = paste("Histogram of", var_name), xlab = var_name, col = "lightblue", border = "white", breaks = 30)
-          }
+          par(mfrow = c(2, 2))
+          plot(model, which = 1:4)
+          par(mfrow = c(1, 1))
         })
 
-        # Save plot safely
         plot_success <- save_plot_safely(plot_paths, plot_code)
 
-        content <- paste0(
-          "## Eksplorasi Data: ", var_name, "\n\n",
-          "**Jenis Visualisasi:** ", input$plot_type, "\n\n",
-          if (plot_success) {
-            paste0("![", input$plot_type, " untuk variabel ", var_name, "](", plot_paths$latex_path, ")\n\n")
-          } else {
-            "**Error:** Plot tidak dapat dibuat.\n\n"
-          },
-          "**Statistik Deskriptif:**\n",
-          "- Rata-rata: ", mean_val, "\n",
-          "- Median: ", median_val, "\n",
-          "- Standar Deviasi: ", sd_val, "\n",
-          "- Minimum: ", min_val, "\n",
-          "- Maksimum: ", max_val, "\n",
-          "- Rentang: ", round(max_val - min_val, 4), "\n\n",
-          "**Karakteristik Distribusi:**\n",
-          "- Bentuk distribusi: ", skewness_desc, "\n",
-          "- Koefisien variasi: ", round((sd_val / mean_val) * 100, 2), "%\n\n",
-          "**Interpretasi Visualisasi:** ", plot_desc, ". ",
-          "Data menunjukkan distribusi yang ", skewness_desc, " dengan variabilitas ",
-          if ((sd_val / mean_val) < 0.2) "rendah" else if ((sd_val / mean_val) < 0.5) "sedang" else "tinggi",
-          ".\n\n"
-        )
-
-        # Add scatter plot specific interpretation
-        if (input$plot_type == "Scatter Plot" && !is.null(input$y_var)) {
-          y_data <- data[[input$y_var]]
-          if (length(var_data) == length(y_data)) {
-            correlation <- cor(var_data, y_data, use = "complete.obs")
-            cor_strength <- if (abs(correlation) < 0.3) "lemah" else if (abs(correlation) < 0.7) "sedang" else "kuat"
-            cor_direction <- if (correlation > 0) "positif" else "negatif"
-
-            content <- paste0(
-              content,
-              "**Analisis Korelasi:**\n",
-              "- Koefisien korelasi: ", round(correlation, 4), "\n",
-              "- Kekuatan hubungan: ", cor_strength, "\n",
-              "- Arah hubungan: ", cor_direction, "\n\n"
-            )
-          }
-        }
-
-        content
-      } else {
         paste0(
-          "## Eksplorasi Data: ", input$x_var, "\n\n",
-          "Error: Variabel tidak ditemukan dalam dataset.\n\n"
+          "## Analisis Regresi Linear: ", input$reg_response, "\n\n",
+          "**Model:** ", formula_str, "\n\n",
+          if (plot_success) {
+            paste0("![Diagnostic Plots untuk Analisis Regresi](", plot_paths$latex_path, ")\n\n")
+          } else {
+            "**Error:** Plot diagnostik tidak dapat dibuat.\n\n"
+          },
+          "**Hasil Analisis:**\n",
+          "- R-squared: ", round(r_squared, 4), " (", round(r_squared * 100, 2), "% variasi dijelaskan)\n",
+          "- F-statistic p-value: ", format(p_value, scientific = TRUE), "\n",
+          "- Jumlah predictor: ", length(input$reg_predictors), "\n\n",
+          "**Variabel Signifikan (p < 0.05):**\n",
+          if (length(sig_vars) > 0) {
+            paste("- ", sig_vars, collapse = "\n")
+          } else {
+            "Tidak ada variabel yang signifikan"
+          }, "\n\n",
+          "**Interpretasi Model:** ",
+          if (p_value < 0.05) {
+            paste0(
+              "Model secara keseluruhan signifikan (p < 0.05) dengan kemampuan menjelaskan ",
+              round(r_squared * 100, 2), "% variasi dalam ", input$reg_response, "."
+            )
+          } else {
+            "Model secara keseluruhan tidak signifikan."
+          }, "\n\n",
+          "**Catatan:** Uji asumsi regresi perlu diperiksa untuk memvalidasi hasil analisis.\n\n"
         )
-      }
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "exploration",
-      title = paste("Eksplorasi Data:", input$x_var),
-      content = interpretation,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Analisis eksplorasi berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add spatial analysis to report (simplified)
-  observeEvent(input$add_spatial_to_report, {
-    req(input$spatial_var1, input$spatial_var2, input$distance_threshold)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("spatial_", report_items$counter)
-
-    # Save spatial plot as PNG file first
-    plot_filename <- paste0("spatial_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$spatial_var1), "_vs_", gsub("[^A-Za-z0-9]", "_", input$spatial_var2), ".png")
-    plot_paths <- create_plot_path(plot_filename)
-
-    # Generate and save the spatial plot
-    plot_code <- quote({
-      # Ensure par is reset after potential multi-plot layout from previous calls
-      if (!is.null(par("mfrow"))) {
-        if (all(par("mfrow") == c(1, 1))) {
-          # Do nothing, already 1x1
-        } else {
-          par(mfrow = c(1, 1)) # Reset to single plot
-        }
-      }
-      var1_data <- data[[input$spatial_var1]]
-      var2_data <- data[[input$spatial_var2]]
-      correlation <- cor(var1_data, var2_data, use = "complete.obs")
-
-      plot(var1_data, var2_data,
-        xlab = input$spatial_var1, ylab = input$spatial_var2,
-        main = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
-        pch = 16, col = "steelblue", cex = 0.8
-      )
-      abline(lm(var2_data ~ var1_data), col = "red", lwd = 2)
-      legend("topright", legend = paste("r =", round(correlation, 3)), bty = "n")
-    })
-
-    plot_success <- save_plot_safely(plot_paths, plot_code)
-
-    content <- paste0(
-      "## Analisis Spasial: ", input$spatial_var1, " vs ", input$spatial_var2, "\n\n",
-      if (plot_success) {
-        paste0("![Scatter Plot Analisis Spasial](", plot_paths$latex_path, ")\n\n")
-      } else {
-        "**Error:** Plot tidak dapat dibuat.\n\n"
       },
-      "**Variabel 1:** ", input$spatial_var1, "\n",
-      "**Variabel 2:** ", input$spatial_var2, "\n",
-      "**Threshold Jarak:** ", input$distance_threshold, " km\n",
-      "**Korelasi:** ", round(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs"), 3), "\n\n",
-      "**Interpretasi:** Scatter plot menunjukkan hubungan spasial antara kedua variabel dengan mempertimbangkan threshold jarak ", input$distance_threshold, " km. Korelasi sebesar ", round(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs"), 3),
-      if (abs(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs")) > 0.7) " menunjukkan hubungan yang kuat." else if (abs(cor(sovi_data()[[input$spatial_var1]], sovi_data()[[input$spatial_var2]], use = "complete.obs")) > 0.3) " menunjukkan hubungan yang sedang." else " menunjukkan hubungan yang lemah.", "\n\n"
-    )
-
-    report_items$content[[item_id]] <- list(
-      type = "spatial",
-      title = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
-      content = content,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Analisis spasial berhasil ditambahkan ke laporan! Download scatter plot secara terpisah.", type = "message")
-  })
-
-  # Add regression analysis to report
-  observeEvent(input$add_regression_to_report, {
-    req(input$reg_response, input$reg_predictors)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("regression_", report_items$counter)
-
-    # Get regression results
-    interpretation <- isolate({
-      tryCatch(
-        {
-          data <- sovi_data()
-          # Add validation for numeric response variable
-          if (!is.numeric(data[[input$reg_response]])) {
-            return("Error: Variabel respons harus numerik untuk regresi.")
-          }
-          if (length(input$reg_predictors) == 0) {
-            return("Error: Pilih setidaknya satu variabel prediktor.")
-          }
-          for (pred in input$reg_predictors) {
-            if (!is.numeric(data[[pred]])) {
-              return(paste0("Error: Prediktor '", pred, "' harus numerik."))
-            }
-          }
-
-          formula_str <- paste(input$reg_response, "~", paste(input$reg_predictors, collapse = " + "))
-          model <- lm(as.formula(formula_str), data = data)
-          model_summary <- summary(model)
-
-          r_squared <- model_summary$r.squared
-          f_stat <- model_summary$fstatistic
-          p_value <- pf(f_stat[1], f_stat[2], f_stat[3], lower.tail = FALSE)
-
-          # Get significant coefficients
-          coef_table <- model_summary$coefficients
-          sig_vars <- rownames(coef_table)[coef_table[, "Pr(>|t|)"] < 0.05]
-          sig_vars <- sig_vars[sig_vars != "(Intercept)"]
-
-          # Save diagnostic plots as PNG file first
-          plot_filename <- paste0("regression_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$reg_response), ".png")
-          plot_paths <- create_plot_path(plot_filename)
-
-          # Generate and save the diagnostic plots
-          plot_code <- quote({
-            par(mfrow = c(2, 2))
-            plot(model, which = 1:4)
-            par(mfrow = c(1, 1)) # Reset par after plotting
-          })
-
-          plot_success <- save_plot_safely(plot_paths, plot_code)
-
-          paste0(
-            "## Analisis Regresi Linear: ", input$reg_response, "\n\n",
-            "**Model:** ", formula_str, "\n\n",
-            if (plot_success) {
-              paste0("![Diagnostic Plots untuk Analisis Regresi](", plot_paths$latex_path, ")\n\n")
-            } else {
-              "**Error:** Plot diagnostik tidak dapat dibuat.\n\n"
-            },
-            "**Hasil Analisis:**\n",
-            "- R-squared: ", round(r_squared, 4), " (", round(r_squared * 100, 2), "% variasi dijelaskan)\n",
-            "- F-statistic p-value: ", format(p_value, scientific = TRUE), "\n",
-            "- Jumlah predictor: ", length(input$reg_predictors), "\n\n",
-            "**Variabel Signifikan (p < 0.05):**\n",
-            if (length(sig_vars) > 0) {
-              paste("- ", sig_vars, collapse = "\n")
-            } else {
-              "Tidak ada variabel yang signifikan"
-            }, "\n\n",
-            "**Interpretasi Model:** ",
-            if (p_value < 0.05) {
-              paste0(
-                "Model secara keseluruhan signifikan (p < 0.05) dengan kemampuan menjelaskan ",
-                round(r_squared * 100, 2), "% variasi dalam ", input$reg_response, "."
-              )
-            } else {
-              "Model secara keseluruhan tidak signifikan."
-            }, "\n\n",
-            "**Catatan:** Uji asumsi regresi perlu diperiksa untuk memvalidasi hasil analisis.\n\n"
-          )
-        },
-        error = function(e) {
-          paste0("Error dalam analisis regresi: ", e$message, "\n\n")
-        }
-      )
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "regression",
-      title = paste("Regresi Linear:", input$reg_response),
-      content = interpretation,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Analisis regresi berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add data summary to report
-  observeEvent(input$add_data_summary_to_report, {
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("summary_", report_items$counter)
-
-    content <- isolate({
-      data <- sovi_data()
-      paste0(
-        "## Ringkasan Dataset\n\n",
-        "**Jumlah Observasi:** ", nrow(data), " kabupaten/kota\n\n",
-        "**Jumlah Variabel:** ", ncol(data), "\n\n",
-        "**Periode Data:** SUSENAS 2017\n\n",
-        "**Status Data:** Dataset lengkap dengan informasi komprehensif mengenai indikator kerentanan sosial di seluruh Indonesia.\n\n"
-      )
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "summary",
-      title = "Ringkasan Dataset",
-      content = content,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Ringkasan dataset berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add descriptive statistics to report
-  observeEvent(input$add_descriptive_to_report, {
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("descriptive_", report_items$counter)
-
-    content <- isolate({
-      data <- sovi_data()
-      numeric_vars <- sapply(data, is.numeric)
-      summary_stats <- summary(data[numeric_vars])
-
-      # Convert summary to a more readable format
-      summary_text <- ""
-      for (var in names(data[numeric_vars])) {
-        var_summary <- summary(data[[var]])
-        summary_text <- paste0(
-          summary_text,
-          "**", var, ":**\n",
-          "- Min: ", round(var_summary[1], 4), "\n",
-          "- Q1: ", round(var_summary[2], 4), "\n",
-          "- Median: ", round(var_summary[3], 4), "\n",
-          "- Mean: ", round(var_summary[4], 4), "\n",
-          "- Q3: ", round(var_summary[5], 4), "\n",
-          "- Max: ", round(var_summary[6], 4), "\n\n"
-        )
+      error = function(e) {
+        paste0("Error dalam analisis regresi: ", e$message, "\n\n")
       }
-
-      paste0(
-        "## Statistik Deskriptif\n\n",
-        "**Jumlah Variabel Numerik:** ", sum(numeric_vars), "\n\n",
-        "**Jumlah Observasi:** ", nrow(data), "\n\n",
-        "**Ringkasan Statistik:**\n\n",
-        summary_text,
-        "**Interpretasi:** Statistik deskriptif menunjukkan distribusi dan karakteristik dasar dari setiap variabel kerentanan sosial. ",
-        "Variabel dengan variabilitas tertinggi dapat diidentifikasi dari rentang (max-min) yang besar.\n\n"
-      )
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "descriptive",
-      title = "Statistik Deskriptif",
-      content = content,
-      timestamp = Sys.time()
     )
-
-    showNotification("Statistik deskriptif berhasil ditambahkan ke laporan!", type = "message")
   })
 
+  report_items$content[[item_id]] <- list(
+    type = "regression",
+    title = paste("Regresi Linear:", input$reg_response),
+    content = interpretation,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Analisis regresi berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add data summary to report
+observeEvent(input$add_data_summary_to_report, {
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("summary_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    paste0(
+      "## Ringkasan Dataset\n\n",
+      "**Jumlah Observasi:** ", nrow(data), " kabupaten/kota\n\n",
+      "**Jumlah Variabel:** ", ncol(data), "\n\n",
+      "**Periode Data:** SUSENAS 2017\n\n",
+      "**Status Data:** Dataset lengkap dengan informasi komprehensif mengenai indikator kerentanan sosial di seluruh Indonesia.\n\n"
+    )
+  })
+
+  report_items$content[[item_id]] <- list(
+    type = "summary",
+    title = "Ringkasan Dataset",
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Ringkasan dataset berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add descriptive statistics to report
+observeEvent(input$add_descriptive_to_report, {
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("descriptive_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    numeric_vars <- sapply(data, is.numeric)
+    summary_stats <- summary(data[numeric_vars])
+
+    summary_text <- ""
+    for (var in names(data[numeric_vars])) {
+      var_summary <- summary(data[[var]])
+      summary_text <- paste0(
+        summary_text,
+        "**", var, ":**\n",
+        "- Min: ", round(var_summary[1], 4), "\n",
+        "- Q1: ", round(var_summary[2], 4), "\n",
+        "- Median: ", round(var_summary[3], 4), "\n",
+        "- Mean: ", round(var_summary[4], 4), "\n",
+        "- Q3: ", round(var_summary[5], 4), "\n",
+        "- Max: ", round(var_summary[6], 4), "\n\n"
+      )
+    }
+
+    paste0(
+      "## Statistik Deskriptif\n\n",
+      "**Jumlah Variabel Numerik:** ", sum(numeric_vars), "\n\n",
+      "**Jumlah Observasi:** ", nrow(data), "\n\n",
+      "**Ringkasan Statistik:**\n\n",
+      summary_text,
+      "**Interpretasi:** Statistik deskriptif menunjukkan distribusi dan karakteristik dasar dari setiap variabel kerentanan sosial. ",
+      "Variabel dengan variabilitas tertinggi dapat diidentifikasi dari rentang (max-min) yang besar.\n\n"
+    )
+  })
+
+  report_items$content[[item_id]] <- list(
+    type = "descriptive",
+    title = "Statistik Deskriptif",
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Statistik deskriptif berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add correlation to report
 observeEvent(input$add_correlation_to_report, {
   report_items$counter <- report_items$counter + 1
   item_id <- paste0("correlation_", report_items$counter)
 
-  # Alternative solution: Direct plot creation without quote()
-content <- isolate({
-  data <- sovi_data()
-  
-  # Ensure we have numeric data
-  numeric_vars <- sapply(data, is.numeric)
-  numeric_data <- data[numeric_vars]
-  
-  # Check if we have enough numeric variables
-  if (ncol(numeric_data) < 2) {
-    return("**Error:** Tidak cukup variabel numerik untuk analisis korelasi.\n\n")
-  }
-  
-  # Calculate correlation matrix
-  cor_matrix <- cor(numeric_data, use = "complete.obs")
-  
-  # Find strongest correlations
-  cor_temp <- cor_matrix
-  cor_temp[upper.tri(cor_temp, diag = TRUE)] <- NA
-  strong_corr <- which(abs(cor_temp) > 0.7, arr.ind = TRUE)
-
-  strong_pairs <- ""
-  if (nrow(strong_corr) > 0) {
-    for (i in 1:min(5, nrow(strong_corr))) {
-      var1 <- rownames(cor_temp)[strong_corr[i, 1]]
-      var2 <- colnames(cor_temp)[strong_corr[i, 2]]
-      corr_val <- cor_temp[strong_corr[i, 1], strong_corr[i, 2]]
-      strong_pairs <- paste0(strong_pairs, "- ", var1, " vs ", var2, ": ", round(corr_val, 3), "\n")
+  content <- isolate({
+    data <- sovi_data()
+    
+    numeric_vars <- sapply(data, is.numeric)
+    numeric_data <- data[numeric_vars]
+    
+    if (ncol(numeric_data) < 2) {
+      return("**Error:** Tidak cukup variabel numerik untuk analisis korelasi.\n\n")
     }
-  } else {
-    strong_pairs <- "- Tidak ada korelasi yang sangat kuat (>0.7) ditemukan\n"
-  }
-
-  # Save plot as PNG file
-  plot_filename <- paste0("correlation_", report_items$counter, ".png")
-  plot_paths <- create_plot_path(plot_filename)
-
-  # Direct plot creation without quote()
-  plot_success <- tryCatch({
-    png(plot_paths$full_path, width = 800, height = 600, res = 100)
     
-    # Load library and create plot
-    library(corrplot)
-    par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
+    cor_matrix <- cor(numeric_data, use = "complete.obs")
     
-    corrplot(cor_matrix,
-      method = "color", 
-      type = "upper", 
-      order = "hclust",
-      tl.cex = 0.8, 
-      tl.col = "black", 
-      tl.srt = 45,
-      addCoef.col = "black",
-      number.cex = 0.7,
-      mar = c(0, 0, 2, 0),
-      title = "Matriks Korelasi Variabel SOVI"
+    cor_temp <- cor_matrix
+    cor_temp[upper.tri(cor_temp, diag = TRUE)] <- NA
+    strong_corr <- which(abs(cor_temp) > 0.7, arr.ind = TRUE)
+
+    strong_pairs <- ""
+    if (nrow(strong_corr) > 0) {
+      for (i in 1:min(5, nrow(strong_corr))) {
+        var1 <- rownames(cor_temp)[strong_corr[i, 1]]
+        var2 <- colnames(cor_temp)[strong_corr[i, 2]]
+        corr_val <- cor_temp[strong_corr[i, 1], strong_corr[i, 2]]
+        strong_pairs <- paste0(strong_pairs, "- ", var1, " vs ", var2, ": ", round(corr_val, 3), "\n")
+      }
+    } else {
+      strong_pairs <- "- Tidak ada korelasi yang sangat kuat (>0.7) ditemukan\n"
+    }
+
+    plot_filename <- paste0("correlation_", report_items$counter, ".png")
+    plot_paths <- create_plot_path(plot_filename)
+
+    plot_success <- tryCatch({
+      png(plot_paths$full_path, width = 800, height = 600, res = 100)
+      
+      library(corrplot)
+      par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
+      
+      corrplot(cor_matrix,
+        method = "color",  
+        type = "upper",  
+        order = "hclust",
+        tl.cex = 0.8,  
+        tl.col = "black",  
+        tl.srt = 45,
+        addCoef.col = "black",
+        number.cex = 0.7,
+        mar = c(0, 0, 2, 0),
+        title = "Matriks Korelasi Variabel SOVI"
+      )
+      
+      dev.off()
+      TRUE
+    }, error = function(e) {
+      if (dev.cur() > 1) dev.off()
+      cat("Error creating plot:", e$message, "\n")
+      FALSE
+    })
+
+    paste0(
+      "## Analisis Korelasi\n\n",
+      if (plot_success) {
+        paste0("![Matriks Korelasi Variabel Kerentanan Sosial](", plot_paths$latex_path, ")\n\n")
+      } else {
+        "**Error:** Plot korelasi tidak dapat dibuat.\n\n"
+      },
+      "**Matriks korelasi** menunjukkan hubungan linear antar variabel kerentanan sosial.\n\n",
+      "**Korelasi Kuat yang Ditemukan (|r| > 0.7):**\n",
+      strong_pairs, "\n",
+      "**Interpretasi:** Korelasi yang kuat menunjukkan adanya hubungan erat antar indikator kerentanan sosial, yang dapat mengindikasikan pola multidimensi kerentanan.\n\n"
     )
-    
-    dev.off()
-    TRUE
-  }, error = function(e) {
-    if (dev.cur() > 1) dev.off()
-    cat("Error creating plot:", e$message, "\n")
-    FALSE
   })
 
-  paste0(
-    "## Analisis Korelasi\n\n",
-    if (plot_success) {
-      paste0("![Matriks Korelasi Variabel Kerentanan Sosial](", plot_paths$latex_path, ")\n\n")
-    } else {
-      "**Error:** Plot korelasi tidak dapat dibuat.\n\n"
-    },
-    "**Matriks korelasi** menunjukkan hubungan linear antar variabel kerentanan sosial.\n\n",
-    "**Korelasi Kuat yang Ditemukan (|r| > 0.7):**\n",
-    strong_pairs, "\n",
-    "**Interpretasi:** Korelasi yang kuat menunjukkan adanya hubungan erat antar indikator kerentanan sosial, yang dapat mengindikasikan pola multidimensi kerentanan.\n\n"
+  report_items$content[[item_id]] <- list(
+    type = "correlation",
+    title = "Analisis Korelasi",
+    content = content,
+    timestamp = Sys.time()
   )
+
+  showNotification("Analisis korelasi berhasil ditambahkan ke laporan!", type = "message")
 })
 
-    showNotification("Analisis korelasi berhasil ditambahkan ke laporan!", type = "message")
-  })
 
-  # Add normality test to report
-  observeEvent(input$add_normality_to_report, {
-    req(input$normality_var)
 
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("normality_", report_items$counter)
+# Add normality test to report
+observeEvent(input$add_normality_to_report, {
+  req(input$normality_var)
 
-    content <- isolate({
-      data <- sovi_data()
-      var_data <- data[[input$normality_var]]
-      var_data <- var_data[!is.na(var_data)]
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("normality_", report_items$counter)
 
-      if (length(var_data) <= 5000) {
-        shapiro_result <- shapiro.test(var_data)
-        shapiro_text <- paste("Shapiro-Wilk p-value:", round(shapiro_result$p.value, 4))
-      } else {
-        shapiro_text <- "Shapiro-Wilk test tidak dilakukan (sampel > 5000)"
-      }
+  content <- isolate({
+    data <- sovi_data()
+    var_data <- data[[input$normality_var]]
+    var_data <- var_data[!is.na(var_data)]
 
-      ad_result <- ad.test(var_data)
-      jb_result <- tseries::jarque.bera.test(var_data)
+    if (length(var_data) <= 5000) {
+      shapiro_result <- shapiro.test(var_data)
+      shapiro_text <- paste("Shapiro-Wilk p-value:", round(shapiro_result$p.value, 4))
+    } else {
+      shapiro_text <- "Shapiro-Wilk test tidak dilakukan (sampel > 5000)"
+    }
 
-      interpretation <- if (ad_result$p.value < 0.05) {
-        "Data tidak berdistribusi normal (p < 0.05)"
-      } else {
-        "Data kemungkinan berdistribusi normal (p >= 0.05)"
-      }
+    ad_result <- ad.test(var_data)
+    jb_result <- tseries::jarque.bera.test(var_data)
 
-      # Save plot as PNG file first
-      plot_filename <- paste0("normality_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$normality_var), ".png")
-      plot_paths <- create_plot_path(plot_filename)
+    interpretation <- if (ad_result$p.value < 0.05) {
+      "Data tidak berdistribusi normal (p < 0.05)"
+    } else {
+      "Data kemungkinan berdistribusi normal (p >= 0.05)"
+    }
 
-      # Generate and save the normality plots
-      plot_code <- quote({
-        par(mfrow = c(1, 2))
-        # Q-Q Plot
-        qqnorm(var_data, main = paste("Q-Q Plot:", input$normality_var))
-        qqline(var_data, col = "red")
-        # Histogram with normal curve
-        hist(var_data,
-          prob = TRUE, main = paste("Histogram:", input$normality_var),
-          xlab = input$normality_var, col = "lightblue", border = "white"
-        )
-        curve(dnorm(x, mean = mean(var_data), sd = sd(var_data)), add = TRUE, col = "red", lwd = 2)
-        par(mfrow = c(1, 1))
-      })
+    plot_filename <- paste0("normality_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$normality_var), ".png")
+    plot_paths <- create_plot_path(plot_filename)
 
-      plot_success <- save_plot_safely(plot_paths, plot_code)
-
-      paste0(
-        "## Uji Normalitas: ", input$normality_var, "\n\n",
-        if (plot_success) {
-          paste0("![Q-Q Plot dan Histogram untuk Uji Normalitas](", plot_paths$latex_path, ")\n\n")
-        } else {
-          "**Error:** Plot normalitas tidak dapat dibuat.\n\n"
-        },
-        "**Hasil Uji:**\n",
-        "- ", shapiro_text, "\n",
-        "- Anderson-Darling p-value: ", round(ad_result$p.value, 4), "\n",
-        "- Jarque-Bera p-value: ", round(jb_result$p.value, 4), "\n\n",
-        "**Interpretasi:** ", interpretation, "\n\n",
-        "**Catatan:** Uji normalitas penting untuk menentukan metode analisis statistik yang tepat.\n\n"
+    plot_code <- quote({
+      par(mfrow = c(1, 2))
+      # Q-Q Plot
+      qqnorm(var_data, main = paste("Q-Q Plot:", input$normality_var))
+      qqline(var_data, col = "red")
+      # Histogram with normal curve
+      hist(var_data,
+        prob = TRUE, main = paste("Histogram:", input$normality_var),
+        xlab = input$normality_var, col = "lightblue", border = "white"
       )
+      curve(dnorm(x, mean = mean(var_data), sd = sd(var_data)), add = TRUE, col = "red", lwd = 2)
+      par(mfrow = c(1, 1))
     })
 
-    report_items$content[[item_id]] <- list(
-      type = "normality",
-      title = paste("Uji Normalitas:", input$normality_var),
-      content = content,
-      timestamp = Sys.time()
-    )
+    plot_success <- save_plot_safely(plot_paths, plot_code)
 
-    showNotification("Uji normalitas berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add homogeneity test to report
-  observeEvent(input$add_homogeneity_to_report, {
-    req(input$homogeneity_var, input$group_var)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("homogeneity_", report_items$counter)
-
-    content <- isolate({
-      data <- sovi_data()
-      group_var <- cut(data[[input$group_var]],
-        breaks = quantile(data[[input$group_var]], probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE),
-        labels = c("Q1", "Q2", "Q3", "Q4"),
-        include.lowest = TRUE
-      )
-
-      levene_result <- leveneTest(data[[input$homogeneity_var]], group_var)
-      bartlett_result <- bartlett.test(data[[input$homogeneity_var]], group_var)
-
-      interpretation <- if (levene_result$`Pr(>F)`[1] < 0.05) {
-        "Varians antar kelompok tidak homogen (p < 0.05)"
+    paste0(
+      "## Uji Normalitas: ", input$normality_var, "\n\n",
+      if (plot_success) {
+        paste0("![Q-Q Plot dan Histogram untuk Uji Normalitas](", plot_paths$latex_path, ")\n\n")
       } else {
-        "Varians antar kelompok homogen (p >= 0.05)"
-      }
-
-      paste0(
-        "## Uji Homogenitas: ", input$homogeneity_var, "\n\n",
-        "**Variabel Pengelompokan:** ", input$group_var, " (dalam kuartil)\n\n",
-        "**Hasil Uji:**\n",
-        "- Levene's Test p-value: ", round(levene_result$`Pr(>F)`[1], 4), "\n",
-        "- Bartlett's Test p-value: ", round(bartlett_result$p.value, 4), "\n\n",
-        "**Interpretasi:** ", interpretation, "\n\n",
-        "**Catatan:** Uji homogenitas varians penting untuk ANOVA dan uji parametrik lainnya.\n\n"
-      )
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "homogeneity",
-      title = paste("Uji Homogenitas:", input$homogeneity_var),
-      content = content,
-      timestamp = Sys.time()
+        "**Error:** Plot normalitas tidak dapat dibuat.\n\n"
+      },
+      "**Hasil Uji:**\n",
+      "- ", shapiro_text, "\n",
+      "- Anderson-Darling p-value: ", round(ad_result$p.value, 4), "\n",
+      "- Jarque-Bera p-value: ", round(jb_result$p.value, 4), "\n\n",
+      "**Interpretasi:** ", interpretation, "\n\n",
+      "**Catatan:** Uji normalitas penting untuk menentukan metode analisis statistik yang tepat.\n\n"
     )
-
-    showNotification("Uji homogenitas berhasil ditambahkan ke laporan!", type = "message")
   })
 
-  # Add mean test to report
-  observeEvent(input$add_mean_test_to_report, {
-    req(input$mean_var, input$test_type)
+  report_items$content[[item_id]] <- list(
+    type = "normality",
+    title = paste("Uji Normalitas:", input$normality_var),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("mean_test_", report_items$counter)
+  showNotification("Uji normalitas berhasil ditambahkan ke laporan!", type = "message")
+})
 
-    content <- isolate({
-      data <- sovi_data()
-      var_data <- data[[input$mean_var]]
 
-      if (input$test_type == "one_sample") {
-        result <- t.test(var_data, mu = input$mu)
-        test_desc <- paste("Uji t satu sampel dengan mu_0 =", input$mu)
-        conclusion <- if (result$p.value < 0.05) {
-          paste0("Tolak H0. Rata-rata populasi berbeda signifikan dari ", input$mu)
-        } else {
-          paste0("Terima H0. Rata-rata populasi tidak berbeda signifikan dari ", input$mu)
-        }
-      } else if (input$test_type == "two_sample") {
-        group_var <- cut(data[[input$group_var_mean]], breaks = 2, labels = c("Group1", "Group2"))
-        group1_data <- var_data[group_var == "Group1"]
-        group2_data <- var_data[group_var == "Group2"]
-        result <- t.test(group1_data, group2_data)
-        test_desc <- "Uji t dua sampel independen"
-        conclusion <- if (result$p.value < 0.05) {
-          "Tolak H0. Rata-rata kedua kelompok berbeda signifikan"
-        } else {
-          "Terima H0. Rata-rata kedua kelompok tidak berbeda signifikan"
-        }
-      } else if (input$test_type == "paired") {
-        var1_data <- data[[input$mean_var]]
-        var2_data <- data[[input$paired_var]]
-        result <- t.test(var1_data, var2_data, paired = TRUE)
-        test_desc <- paste("Uji t berpasangan:", input$mean_var, "vs", input$paired_var)
-        conclusion <- if (result$p.value < 0.05) {
-          "Tolak H0. Ada perbedaan signifikan antara kedua variabel"
-        } else {
-          "Terima H0. Tidak ada perbedaan signifikan antara kedua variabel"
-        }
-      }
 
-      paste0(
-        "## Uji Rata-rata: ", input$mean_var, "\n\n",
-        "**Jenis Uji:** ", test_desc, "\n\n",
-        "**Hasil Uji:**\n",
-        "- t-statistic: ", round(result$statistic, 4), "\n",
-        "- p-value: ", format(result$p.value, scientific = TRUE), "\n",
-        "- Confidence Interval: [", round(result$conf.int[1], 4), ", ", round(result$conf.int[2], 4), "]\n\n",
-        "**Kesimpulan:** ", conclusion, "\n\n"
-      )
-    })
+# Add homogeneity test to report
+observeEvent(input$add_homogeneity_to_report, {
+  req(input$homogeneity_var, input$group_var)
 
-    report_items$content[[item_id]] <- list(
-      type = "mean_test",
-      title = paste("Uji Rata-rata:", input$mean_var),
-      content = content,
-      timestamp = Sys.time()
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("homogeneity_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    group_var <- cut(data[[input$group_var]],
+      breaks = quantile(data[[input$group_var]], probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE),
+      labels = c("Q1", "Q2", "Q3", "Q4"),
+      include.lowest = TRUE
     )
 
-    showNotification("Uji rata-rata berhasil ditambahkan ke laporan!", type = "message")
+    levene_result <- leveneTest(data[[input$homogeneity_var]], group_var)
+    bartlett_result <- bartlett.test(data[[input$homogeneity_var]], group_var)
+
+    interpretation <- if (levene_result$`Pr(>F)`[1] < 0.05) {
+      "Varians antar kelompok tidak homogen (p < 0.05)"
+    } else {
+      "Varians antar kelompok homogen (p >= 0.05)"
+    }
+
+    paste0(
+      "## Uji Homogenitas: ", input$homogeneity_var, "\n\n",
+      "**Variabel Pengelompokan:** ", input$group_var, " (dalam kuartil)\n\n",
+      "**Hasil Uji:**\n",
+      "- Levene's Test p-value: ", round(levene_result$`Pr(>F)`[1], 4), "\n",
+      "- Bartlett's Test p-value: ", round(bartlett_result$p.value, 4), "\n\n",
+      "**Interpretasi:** ", interpretation, "\n\n",
+      "**Catatan:** Uji homogenitas varians penting untuk ANOVA dan uji parametrik lainnya.\n\n"
+    )
   })
+
+  report_items$content[[item_id]] <- list(
+    type = "homogeneity",
+    title = paste("Uji Homogenitas:", input$homogeneity_var),
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Uji homogenitas berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add mean test to report
+observeEvent(input$add_mean_test_to_report, {
+  req(input$mean_var, input$test_type)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("mean_test_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    var_data <- data[[input$mean_var]]
+
+    if (input$test_type == "one_sample") {
+      result <- t.test(var_data, mu = input$mu)
+      test_desc <- paste("Uji t satu sampel dengan mu_0 =", input$mu)
+      conclusion <- if (result$p.value < 0.05) {
+        paste0("Tolak H0. Rata-rata populasi berbeda signifikan dari ", input$mu)
+      } else {
+        paste0("Gagal tolak H0. Rata-rata populasi tidak berbeda signifikan dari ", input$mu)
+      }
+    } else if (input$test_type == "two_sample") {
+      group_var <- cut(data[[input$group_var_mean]], breaks = 2, labels = c("Group1", "Group2"))
+      group1_data <- var_data[group_var == "Group1"]
+      group2_data <- var_data[group_var == "Group2"]
+      result <- t.test(group1_data, group2_data)
+      test_desc <- "Uji t dua sampel independen"
+      conclusion <- if (result$p.value < 0.05) {
+        "Tolak H0. Rata-rata kedua kelompok berbeda signifikan"
+      } else {
+        "Gagal tolak H0. Rata-rata kedua kelompok tidak berbeda signifikan"
+      }
+    } else if (input$test_type == "paired") {
+      var1_data <- data[[input$mean_var]]
+      var2_data <- data[[input$paired_var]]
+      result <- t.test(var1_data, var2_data, paired = TRUE)
+      test_desc <- paste("Uji t berpasangan:", input$mean_var, "vs", input$paired_var)
+      conclusion <- if (result$p.value < 0.05) {
+        "Tolak H0. Ada perbedaan signifikan antara kedua variabel"
+      } else {
+        "Gagal tolak H0. Tidak ada perbedaan signifikan antara kedua variabel"
+      }
+    }
+
+    paste0(
+      "## Uji Rata-rata: ", input$mean_var, "\n\n",
+      "**Jenis Uji:** ", test_desc, "\n\n",
+      "**Hasil Uji:**\n",
+      "- t-statistic: ", round(result$statistic, 4), "\n",
+      "- p-value: ", format(result$p.value, scientific = TRUE), "\n",
+      "- Confidence Interval: [", round(result$conf.int[1], 4), ", ", round(result$conf.int[2], 4), "]\n\n",
+      "**Kesimpulan:** ", conclusion, "\n\n"
+    )
+  })
+
+  report_items$content[[item_id]] <- list(
+    type = "mean_test",
+    title = paste("Uji Rata-rata:", input$mean_var),
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Uji rata-rata berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
 
 # Add ANOVA to report
 observeEvent(input$add_anova_to_report, {
@@ -1928,15 +1931,12 @@ observeEvent(input$add_anova_to_report, {
     factor1 <- cut(data[[input$anova_factor1]], breaks = 3, labels = c("Low", "Medium", "High"))
 
     if (input$anova_type == "one_way") {
-      # Save ANOVA plot as PNG file first
       plot_filename <- paste0("anova_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$anova_response), "_by_", gsub("[^A-Za-z0-9]", "_", input$anova_factor1), ".png")
       plot_paths <- create_plot_path(plot_filename)
 
-      # Direct plot creation without quote()
       plot_success <- tryCatch({
         png(plot_paths$full_path, width = 800, height = 600, res = 100)
         
-        # Reset par and create boxplot
         par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
         boxplot(data[[input$anova_response]] ~ factor1,
           main = paste("Boxplot:", input$anova_response, "by", input$anova_factor1),
@@ -1958,11 +1958,10 @@ observeEvent(input$add_anova_to_report, {
       aov_summary <- summary(model)
       p_value <- aov_summary[[1]][["Pr(>F)"]][1]
 
-      # Safe check for p_value
       conclusion <- if (!is.na(p_value) && p_value < 0.05) {
         "Tolak H0. Ada perbedaan signifikan antar kelompok"
       } else {
-        "Terima H0. Tidak ada perbedaan signifikan antar kelompok"
+        "Gagal tolak H0. Tidak ada perbedaan signifikan antar kelompok"
       }
 
       content_text <- paste0(
@@ -1980,20 +1979,16 @@ observeEvent(input$add_anova_to_report, {
       )
       
     } else if (input$anova_type == "two_way") {
-      # Validate that factor2 input exists
       req(input$anova_factor2)
       
-      # Save ANOVA plot as PNG file first
       plot_filename <- paste0("anova_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$anova_response), "_two_way.png")
       plot_paths <- create_plot_path(plot_filename)
 
       factor2 <- cut(data[[input$anova_factor2]], breaks = 3, labels = c("Low", "Medium", "High"))
 
-      # Direct plot creation without quote()
       plot_success <- tryCatch({
         png(plot_paths$full_path, width = 800, height = 600, res = 100)
         
-        # Reset par and create interaction plot
         par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
         interaction.plot(factor1, factor2, data[[input$anova_response]],
           main = paste("Interaction Plot:", input$anova_response),
@@ -2015,7 +2010,6 @@ observeEvent(input$add_anova_to_report, {
       aov_summary <- summary(model)
       p_values <- aov_summary[[1]][["Pr(>F)"]]
       
-      # Safe check for p_values with proper handling of NA values
       interpret_significance <- function(p_val) {
         if (is.na(p_val)) {
           return("Tidak dapat dihitung")
@@ -2026,7 +2020,6 @@ observeEvent(input$add_anova_to_report, {
         }
       }
       
-      # Format p-values safely
       format_p_value <- function(p_val) {
         if (is.na(p_val)) {
           return("NA")
@@ -2058,1062 +2051,832 @@ observeEvent(input$add_anova_to_report, {
     content_text
   })
 
-    report_items$content[[item_id]] <- list(
-      type = "anova",
-      title = paste("ANOVA:", input$anova_response),
-      content = content,
-      timestamp = Sys.time()
-    )
+  report_items$content[[item_id]] <- list(
+    type = "anova",
+    title = paste("ANOVA:", input$anova_response),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    showNotification("ANOVA berhasil ditambahkan ke laporan!", type = "message")
+  showNotification("ANOVA berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add proportion test to report
+observeEvent(input$add_proportion_to_report, {
+  req(input$prop_var, input$prop_threshold, input$prop_hypothesized)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("proportion_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    var_data <- data[[input$prop_var]]
+    success_count <- sum(var_data > input$prop_threshold, na.rm = TRUE)
+    total_count <- sum(!is.na(var_data))
+    sample_prop <- success_count / total_count
+
+    prop_result <- prop.test(success_count, total_count, p = input$prop_hypothesized)
+
+    conclusion <- if (prop_result$p.value < 0.05) {
+      paste0("Tolak H0. Proporsi populasi berbeda signifikan dari ", input$prop_hypothesized)
+    } else {
+      paste0("Gagal tolak H0. Proporsi populasi tidak berbeda signifikan dari ", input$prop_hypothesized)
+    }
+
+    paste0(
+      "## Uji Proporsi: ", input$prop_var, "\n\n",
+      "**Threshold:** > ", input$prop_threshold, "\n",
+      "**Proporsi Hipotesis:** ", input$prop_hypothesized, "\n\n",
+      "**Hasil Uji:**\n",
+      "- Proporsi Sampel: ", round(sample_prop, 4), "\n",
+      "- X-squared: ", round(prop_result$statistic, 4), "\n",
+      "- p-value: ", format(prop_result$p.value, scientific = TRUE), "\n",
+      "- Confidence Interval: [", round(prop_result$conf.int[1], 4), ", ", round(prop_result$conf.int[2], 4), "]\n\n",
+      "**Kesimpulan:** ", conclusion, "\n\n"
+    )
   })
 
-  # Add proportion test to report
-  observeEvent(input$add_proportion_to_report, {
-    req(input$prop_var, input$prop_threshold, input$prop_hypothesized)
+  report_items$content[[item_id]] <- list(
+    type = "proportion",
+    title = paste("Uji Proporsi:", input$prop_var),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("proportion_", report_items$counter)
+  showNotification("Uji proporsi berhasil ditambahkan ke laporan!", type = "message")
+})
 
-    content <- isolate({
-      data <- sovi_data()
-      var_data <- data[[input$prop_var]]
-      success_count <- sum(var_data > input$prop_threshold, na.rm = TRUE)
-      total_count <- sum(!is.na(var_data))
-      sample_prop <- success_count / total_count
 
-      prop_result <- prop.test(success_count, total_count, p = input$prop_hypothesized)
 
-      conclusion <- if (prop_result$p.value < 0.05) {
-        paste0("Tolak H0. Proporsi populasi berbeda signifikan dari ", input$prop_hypothesized)
+# Add variance test to report
+observeEvent(input$add_variance_to_report, {
+  req(input$variance_var, input$var_test_type)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("variance_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    var_data <- data[[input$variance_var]]
+    var_data <- var_data[!is.na(var_data)]
+
+    if (input$var_test_type == "one_var") {
+      n <- length(var_data)
+      sample_var <- var(var_data)
+      chi_stat <- (n - 1) * sample_var / input$sigma_squared
+      p_value <- 2 * min(pchisq(chi_stat, n - 1), 1 - pchisq(chi_stat, n - 1))
+
+      conclusion <- if (p_value < 0.05) {
+        paste0("Tolak H0. Varians populasi berbeda signifikan dari ", input$sigma_squared)
       } else {
-        paste0("Terima H0. Proporsi populasi tidak berbeda signifikan dari ", input$prop_hypothesized)
+        paste0("Gagal tolak H0. Varians populasi tidak berbeda signifikan dari ", input$sigma_squared)
       }
 
-      paste0(
-        "## Uji Proporsi: ", input$prop_var, "\n\n",
-        "**Threshold:** > ", input$prop_threshold, "\n",
-        "**Proporsi Hipotesis:** ", input$prop_hypothesized, "\n\n",
+      content_text <- paste0(
+        "## Uji Varians Satu Sampel: ", input$variance_var, "\n\n",
+        "**Varians Hipotesis (sigma-squared):** ", input$sigma_squared, "\n\n",
         "**Hasil Uji:**\n",
-        "- Proporsi Sampel: ", round(sample_prop, 4), "\n",
-        "- X-squared: ", round(prop_result$statistic, 4), "\n",
-        "- p-value: ", format(prop_result$p.value, scientific = TRUE), "\n",
-        "- Confidence Interval: [", round(prop_result$conf.int[1], 4), ", ", round(prop_result$conf.int[2], 4), "]\n\n",
+        "- Varians Sampel: ", round(sample_var, 4), "\n",
+        "- Chi-square statistic: ", round(chi_stat, 4), "\n",
+        "- p-value: ", format(p_value, scientific = TRUE), "\n\n",
         "**Kesimpulan:** ", conclusion, "\n\n"
       )
-    })
+    } else {
+      group_var <- cut(data[[input$group_var_variance]], breaks = 2, labels = c("Group1", "Group2"))
+      group1_data <- var_data[group_var == "Group1" & !is.na(group_var)]
+      group2_data <- var_data[group_var == "Group2" & !is.na(group_var)]
 
-    report_items$content[[item_id]] <- list(
-      type = "proportion",
-      title = paste("Uji Proporsi:", input$prop_var),
-      content = content,
-      timestamp = Sys.time()
-    )
+      f_result <- var.test(group1_data, group2_data)
 
-    showNotification("Uji proporsi berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add variance test to report
-  observeEvent(input$add_variance_to_report, {
-    req(input$variance_var, input$var_test_type)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("variance_", report_items$counter)
-
-    content <- isolate({
-      data <- sovi_data()
-      var_data <- data[[input$variance_var]]
-      var_data <- var_data[!is.na(var_data)]
-
-      if (input$var_test_type == "one_var") {
-        # Chi-square test for variance
-        n <- length(var_data)
-        sample_var <- var(var_data)
-        chi_stat <- (n - 1) * sample_var / input$sigma_squared
-        p_value <- 2 * min(pchisq(chi_stat, n - 1), 1 - pchisq(chi_stat, n - 1))
-
-        conclusion <- if (p_value < 0.05) {
-          paste0("Tolak H0. Varians populasi berbeda signifikan dari ", input$sigma_squared)
-        } else {
-          paste0("Terima H0. Varians populasi tidak berbeda signifikan dari ", input$sigma_squared)
-        }
-
-        content_text <- paste0(
-          "## Uji Varians Satu Sampel: ", input$variance_var, "\n\n",
-          "**Varians Hipotesis (sigma-squared):** ", input$sigma_squared, "\n\n",
-          "**Hasil Uji:**\n",
-          "- Varians Sampel: ", round(sample_var, 4), "\n",
-          "- Chi-square statistic: ", round(chi_stat, 4), "\n",
-          "- p-value: ", format(p_value, scientific = TRUE), "\n\n",
-          "**Kesimpulan:** ", conclusion, "\n\n"
-        )
+      conclusion <- if (f_result$p.value < 0.05) {
+        "Tolak H0. Varians kedua kelompok berbeda signifikan"
       } else {
-        # F-test for equality of variances
-        group_var <- cut(data[[input$group_var_variance]], breaks = 2, labels = c("Group1", "Group2"))
-        group1_data <- var_data[group_var == "Group1" & !is.na(group_var)]
-        group2_data <- var_data[group_var == "Group2" & !is.na(group_var)]
-
-        f_result <- var.test(group1_data, group2_data)
-
-        conclusion <- if (f_result$p.value < 0.05) {
-          "Tolak H0. Varians kedua kelompok berbeda signifikan"
-        } else {
-          "Terima H0. Varians kedua kelompok tidak berbeda signifikan"
-        }
-
-        content_text <- paste0(
-          "## Uji Varians Dua Sampel: ", input$variance_var, "\n\n",
-          "**Variabel Pengelompokan:** ", input$group_var_variance, "\n\n",
-          "**Hasil Uji:**\n",
-          "- F-statistic: ", round(f_result$statistic, 4), "\n",
-          "- p-value: ", format(f_result$p.value, scientific = TRUE), "\n",
-          "- Confidence Interval: [", round(f_result$conf.int[1], 4), ", ", round(f_result$conf.int[2], 4), "]\n\n",
-          "**Kesimpulan:** ", conclusion, "\n\n"
-        )
+        "Gagal tolak H0. Varians kedua kelompok tidak berbeda signifikan"
       }
 
-      content_text
-    })
+      content_text <- paste0(
+        "## Uji Varians Dua Sampel: ", input$variance_var, "\n\n",
+        "**Variabel Pengelompokan:** ", input$group_var_variance, "\n\n",
+        "**Hasil Uji:**\n",
+        "- F-statistic: ", round(f_result$statistic, 4), "\n",
+        "- p-value: ", format(f_result$p.value, scientific = TRUE), "\n",
+        "- Confidence Interval: [", round(f_result$conf.int[1], 4), ", ", round(f_result$conf.int[2], 4), "]\n\n",
+        "**Kesimpulan:** ", conclusion, "\n\n"
+      )
+    }
 
-    report_items$content[[item_id]] <- list(
-      type = "variance",
-      title = paste("Uji Varians:", input$variance_var),
-      content = content,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Uji varians berhasil ditambahkan ke laporan!", type = "message")
+    content_text
   })
 
-  # Add categorization to report
-  observeEvent(input$add_categorization_to_report, {
-    req(input$var_to_categorize, input$method, input$n_categories)
+  report_items$content[[item_id]] <- list(
+    type = "variance",
+    title = paste("Uji Varians:", input$variance_var),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("categorization_", report_items$counter)
+  showNotification("Uji varians berhasil ditambahkan ke laporan!", type = "message")
+})
 
-    content <- isolate({
-      # Get actual categorized data
-      data <- sovi_data()
-      var_name <- input$var_to_categorize
-      n_cat <- input$n_categories
 
-      # Perform categorization
-      cat_var <- NULL # Initialize to avoid errors if conditions not met
-      if (input$method == "quantile") {
+
+# Add categorization to report
+observeEvent(input$add_categorization_to_report, {
+  req(input$var_to_categorize, input$method, input$n_categories)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("categorization_", report_items$counter)
+
+  content <- isolate({
+    data <- sovi_data()
+    var_name <- input$var_to_categorize
+    n_cat <- input$n_categories
+
+    cat_var <- NULL
+    if (input$method == "quantile") {
+      cat_var <- cut(data[[var_name]],
+        breaks = quantile(data[[var_name]], probs = seq(0, 1, length.out = n_cat + 1), na.rm = TRUE),
+        include.lowest = TRUE, labels = paste0("Cat", 1:n_cat)
+      )
+    } else if (input$method == "equal_width") {
+      cat_var <- cut(data[[var_name]], breaks = n_cat, labels = paste0("Cat", 1:n_cat))
+    } else if (input$method == "kmeans") {
+      if (sum(!is.na(data[[var_name]])) > n_cat) {
+        kmeans_result <- kmeans(data[[var_name]][!is.na(data[[var_name]])], centers = n_cat)
         cat_var <- cut(data[[var_name]],
           breaks = quantile(data[[var_name]], probs = seq(0, 1, length.out = n_cat + 1), na.rm = TRUE),
           include.lowest = TRUE, labels = paste0("Cat", 1:n_cat)
         )
-      } else if (input$method == "equal_width") {
+      } else {
         cat_var <- cut(data[[var_name]], breaks = n_cat, labels = paste0("Cat", 1:n_cat))
-      } else if (input$method == "kmeans") {
-        if (sum(!is.na(data[[var_name]])) > n_cat) {
-          kmeans_result <- kmeans(data[[var_name]][!is.na(data[[var_name]])], centers = n_cat)
-          cat_var <- cut(data[[var_name]],
-            breaks = quantile(data[[var_name]], probs = seq(0, 1, length.out = n_cat + 1), na.rm = TRUE),
-            include.lowest = TRUE, labels = paste0("Cat", 1:n_cat)
-          )
-        } else {
-          cat_var <- cut(data[[var_name]], breaks = n_cat, labels = paste0("Cat", 1:n_cat))
-        }
       }
+    }
 
-      # Handle case where cat_var is still NULL or has NAs
-      if (is.null(cat_var) || all(is.na(cat_var))) {
-        return(paste0(
-          "## Kategorisasi Data: ", input$var_to_categorize, "\n\n",
-          "**Error:** Kategorisasi tidak dapat dilakukan. Pastikan variabel dan jumlah kategori sesuai.\n\n"
-        ))
-      }
+    if (is.null(cat_var) || all(is.na(cat_var))) {
+      return(paste0(
+        "## Kategorisasi Data: ", input$var_to_categorize, "\n\n",
+        "**Error:** Kategorisasi tidak dapat dilakukan. Pastikan variabel dan jumlah kategori sesuai.\n\n"
+      ))
+    }
 
-      # Create summary by category
-      summary_stats <- data.frame(
-        Kategori = names(table(cat_var)),
-        Frekuensi = as.numeric(table(cat_var)),
-        Persentase = round(as.numeric(prop.table(table(cat_var))) * 100, 2),
-        stringsAsFactors = FALSE
-      )
+    summary_stats <- data.frame(
+      Kategori = names(table(cat_var)),
+      Frekuensi = as.numeric(table(cat_var)),
+      Persentase = round(as.numeric(prop.table(table(cat_var))) * 100, 2),
+      stringsAsFactors = FALSE
+    )
 
-      # Calculate means by category for original variable
-      means_by_cat <- aggregate(data[[var_name]], by = list(cat_var), FUN = mean, na.rm = TRUE)
-      summary_stats$Rata_rata_Asli <- round(means_by_cat$x, 4)
+    means_by_cat <- aggregate(data[[var_name]], by = list(cat_var), FUN = mean, na.rm = TRUE)
+    summary_stats$Rata_rata_Asli <- round(means_by_cat$x, 4)
 
-      # Save plot as PNG file first
-      plot_filename <- paste0("categorization_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$var_to_categorize), ".png")
-      plot_paths <- create_plot_path(plot_filename)
+    plot_filename <- paste0("categorization_", report_items$counter, "_", gsub("[^A-Za-z0-9]", "_", input$var_to_categorize), ".png")
+    plot_paths <- create_plot_path(plot_filename)
 
-      # Generate and save the categorization plots
-      plot_code <- quote({
-        # Ensure par is reset after potential multi-plot layout from previous calls
-        if (!is.null(par("mfrow"))) {
-          if (all(par("mfrow") == c(1, 1))) {
-            # Do nothing, already 1x1
-          } else {
+    plot_code <- quote({
+      if (!is.null(par("mfrow"))) {
+          if (!all(par("mfrow") == c(1, 1))) {
             par(mfrow = c(1, 1)) # Reset to single plot
           }
-        }
-
-        par(mfrow = c(1, 2))
-
-        # Bar plot of categories
-        freq_table <- table(cat_var)
-        barplot(freq_table,
-          main = paste("Distribusi Kategori:", var_name),
-          xlab = "Kategori",
-          ylab = "Frekuensi",
-          col = rainbow(length(freq_table)),
-          border = "white"
-        )
-
-        # Histogram of original variable
-        hist(data[[var_name]],
-          main = paste("Histogram:", var_name),
-          xlab = var_name,
-          col = "lightblue",
-          border = "white",
-          breaks = 20
-        )
-
-        par(mfrow = c(1, 1))
-      })
-      plot_success <- save_plot_safely(plot_paths, plot_code)
-
-      # Create content
-      paste0(
-        "## Kategorisasi Data: ", input$var_to_categorize, "\n\n",
-        if (plot_success) {
-          paste0("![Visualisasi Hasil Kategorisasi](", plot_paths$latex_path, ")\n\n")
-        } else {
-          "**Error:** Plot tidak dapat dibuat.\n\n"
-        },
-        "**Metode:** ", switch(input$method,
-          "quantile" = "Kuantil (Percentile)",
-          "equal_width" = "Lebar Sama (Equal Width)",
-          "kmeans" = "K-means Clustering"
-        ), "\n\n",
-        "**Jumlah Kategori:** ", input$n_categories, "\n\n",
-        "**Ringkasan Kategorisasi:**\n\n",
-        "| Kategori | Frekuensi | Persentase | Rata-rata Asli |\n",
-        "|----------|-----------|------------|------------|",
-        paste(apply(summary_stats, 1, function(x) {
-          paste("| ", x[1], " | ", x[2], " | ", x[3], "% | ", x[4], " |")
-        }), collapse = "\n"), "\n\n",
-        "**Total Observasi:** ", sum(summary_stats$Frekuensi), "\n\n",
-        "**Interpretasi:** Kategorisasi berhasil membagi variabel ", var_name,
-        " menjadi ", n_cat, " kategori. Kategori dengan frekuensi tertinggi adalah '",
-        summary_stats$Kategori[which.max(summary_stats$Frekuensi)], "' dengan ",
-        max(summary_stats$Frekuensi), " observasi (",
-        summary_stats$Persentase[which.max(summary_stats$Frekuensi)], "%).\n\n",
-        "**Catatan:** Metode ", switch(input$method,
-          "quantile" = "kuantil memastikan distribusi yang relatif merata antar kategori",
-          "equal_width" = "lebar sama memberikan interval yang konsisten",
-          "kmeans" = "k-means mengelompokkan data berdasarkan kemiripan nilai"
-        ), ".\n\n"
-      )
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "categorization",
-      title = paste("Kategorisasi:", input$var_to_categorize),
-      content = content,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Proses kategorisasi berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add frequency table to report
-  observeEvent(input$add_freq_table_to_report, {
-    req(input$cat_var_explore)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("freq_table_", report_items$counter)
-
-    content <- isolate({
-      data <- categorized_data()
-      var_name <- input$cat_var_explore
-      freq_table <- table(data[[var_name]])
-      prop_table <- prop.table(freq_table) * 100
-
-      # Create formatted table text
-      table_text <- paste0(
-        "## Tabel Frekuensi: ", var_name, "\n\n",
-        "| Kategori | Frekuensi | Persentase |\n",
-        "|----------|-----------|------------|\n"
-      )
-
-      for (i in 1:length(freq_table)) {
-        table_text <- paste0(
-          table_text,
-          "| ", names(freq_table)[i], " | ", freq_table[i], " | ",
-          round(prop_table[i], 2), "% |\n"
-        )
       }
 
-      table_text <- paste0(
-        table_text, "\n",
-        "**Total Observasi:** ", sum(freq_table), "\n\n",
-        "**Interpretasi:** Tabel frekuensi menunjukkan distribusi data kategorik untuk variabel ",
-        var_name, ". Kategori dengan frekuensi tertinggi adalah '",
-        names(which.max(freq_table)), "' dengan ", max(freq_table),
-        " observasi (", round(max(prop_table), 2), "%).\n\n"
+      par(mfrow = c(1, 2))
+
+      freq_table <- table(cat_var)
+      barplot(freq_table,
+        main = paste("Distribusi Kategori:", var_name),
+        xlab = "Kategori",
+        ylab = "Frekuensi",
+        col = rainbow(length(freq_table)),
+        border = "white"
       )
 
-      table_text
+      hist(data[[var_name]],
+        main = paste("Histogram:", var_name),
+        xlab = var_name,
+        col = "lightblue",
+        border = "white",
+        breaks = 20
+      )
+      par(mfrow = c(1, 1))
     })
+    plot_success <- save_plot_safely(plot_paths, plot_code)
 
-    report_items$content[[item_id]] <- list(
-      type = "frequency_table",
-      title = paste("Tabel Frekuensi:", input$cat_var_explore),
-      content = content,
-      timestamp = Sys.time()
-    )
-
-    showNotification("Tabel frekuensi berhasil ditambahkan ke laporan!", type = "message")
-  })
-
-  # Add crosstab table to report
-  observeEvent(input$add_crosstab_to_report, {
-    req(input$cat_var1, input$cat_var2)
-
-    report_items$counter <- report_items$counter + 1
-    item_id <- paste0("crosstab_", report_items$counter)
-
-    content <- isolate({
-      data <- categorized_data()
-      var1 <- input$cat_var1
-      var2 <- input$cat_var2
-
-      # Create crosstab
-      crosstab <- table(data[[var1]], data[[var2]])
-      prop_crosstab <- prop.table(crosstab) * 100
-
-      # Create formatted table text
-      table_text <- paste0(
-        "## Tabulasi Silang: ", var1, " vs ", var2, "\n\n",
-        "### Frekuensi:\n",
-        "```\n",
-        paste(capture.output(print(crosstab)), collapse = "\n"),
-        "\n```\n\n",
-        "### Persentase:\n",
-        "```\n",
-        paste(capture.output(print(round(prop_crosstab, 2))), collapse = "\n"),
-        "\n```\n\n"
-      )
-
-      # Chi-square test if applicable
-      if (min(crosstab) >= 5) {
-        chi_test <- chisq.test(crosstab)
-        table_text <- paste0(
-          table_text,
-          "**Uji Chi-square:**\n",
-          "- Chi-square statistic: ", round(chi_test$statistic, 4), "\n",
-          "- p-value: ", format(chi_test$p.value, scientific = TRUE), "\n",
-          "- Kesimpulan: ",
-          if (chi_test$p.value < 0.05) {
-            "Ada hubungan signifikan antara kedua variabel"
-          } else {
-            "Tidak ada hubungan signifikan antara kedua variabel"
-          }, "\n\n"
-        )
+    paste0(
+      "## Kategorisasi Data: ", input$var_to_categorize, "\n\n",
+      if (plot_success) {
+        paste0("![Visualisasi Hasil Kategorisasi](", plot_paths$latex_path, ")\n\n")
       } else {
-        table_text <- paste0(
-          table_text,
-          "**Catatan:** Uji Chi-square tidak dapat dilakukan karena ada sel dengan frekuensi < 5.\n\n"
-        )
-      }
+        "**Error:** Plot tidak dapat dibuat.\n\n"
+      },
+      "**Metode:** ", switch(input$method,
+        "quantile" = "Kuantil (Percentile)",
+        "equal_width" = "Lebar Sama (Equal Width)",
+        "kmeans" = "K-means Clustering"
+      ), "\n\n",
+      "**Jumlah Kategori:** ", input$n_categories, "\n\n",
+      "**Ringkasan Kategorisasi:**\n\n",
+"| Kategori | Frekuensi | Persentase | Rata-rata Asli |\n",
+"|---|---|---|---|\n",
+      paste(apply(summary_stats, 1, function(x) {
+        paste("|", x[1], "|", x[2], "|", x[3], "% |", x[4], "|")
+      }), collapse = "\n"), "\n\n",
+      "**Total Observasi:** ", sum(summary_stats$Frekuensi), "\n\n",
+      "**Interpretasi:** Kategorisasi berhasil membagi variabel ", var_name,
+      " menjadi ", n_cat, " kategori. Kategori dengan frekuensi tertinggi adalah '",
+      summary_stats$Kategori[which.max(summary_stats$Frekuensi)], "' dengan ",
+      max(summary_stats$Frekuensi), " observasi (",
+      summary_stats$Persentase[which.max(summary_stats$Frekuensi)], "%).\n\n",
+      "**Catatan:** Metode ", switch(input$method,
+        "quantile" = "kuantil memastikan distribusi yang relatif merata antar kategori",
+        "equal_width" = "lebar sama memberikan interval yang konsisten",
+        "kmeans" = "k-means mengelompokkan data berdasarkan kemiripan nilai"
+      ), ".\n\n"
+    )
+  })
 
+  report_items$content[[item_id]] <- list(
+    type = "categorization",
+    title = paste("Kategorisasi:", input$var_to_categorize),
+    content = content,
+    timestamp = Sys.time()
+  )
+
+  showNotification("Proses kategorisasi berhasil ditambahkan ke laporan!", type = "message")
+})
+
+
+
+# Add frequency table to report
+observeEvent(input$add_freq_table_to_report, {
+  req(input$cat_var_explore)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("freq_table_", report_items$counter)
+
+  content <- isolate({
+    data <- categorized_data()
+    var_name <- input$cat_var_explore
+    freq_table <- table(data[[var_name]])
+    prop_table <- prop.table(freq_table) * 100
+
+    table_text <- paste0(
+      "## Tabel Frekuensi: ", var_name, "\n\n",
+      "| Kategori | Frekuensi | Persentase |\n",
+      "|-|--||\n"
+    )
+
+    for (i in 1:length(freq_table)) {
       table_text <- paste0(
         table_text,
-        "**Interpretasi:** Tabulasi silang menunjukkan hubungan antara ", var1, " dan ", var2,
-        ". Total observasi: ", sum(crosstab), ".\n\n"
+        "| ", names(freq_table)[i], " | ", freq_table[i], " | ",
+        round(prop_table[i], 2), "% |\n"
       )
+    }
 
-      table_text
-    })
-
-    report_items$content[[item_id]] <- list(
-      type = "crosstab",
-      title = paste("Tabulasi Silang:", input$cat_var1, "vs", input$cat_var2),
-      content = content,
-      timestamp = Sys.time()
+    table_text <- paste0(
+      table_text, "\n",
+      "**Total Observasi:** ", sum(freq_table), "\n\n",
+      "**Interpretasi:** Tabel frekuensi menunjukkan distribusi data kategorik untuk variabel ",
+      var_name, ". Kategori dengan frekuensi tertinggi adalah '",
+      names(which.max(freq_table)), "' dengan ", max(freq_table),
+      " observasi (", round(max(prop_table), 2), "%).\n\n"
     )
 
-    showNotification("Tabulasi silang berhasil ditambahkan ke laporan!", type = "message")
+    table_text
   })
 
-  # Display current report contents
-  output$report_contents <- renderText({
-    if (length(report_items$content) == 0) {
-      return("Belum ada analisis yang ditambahkan ke laporan.\n\nPETUNJUK PENGGUNAAN:\n1. Lakukan analisis di berbagai tab (Eksplorasi, Asumsi, Inferensia, Regresi)\n2. Klik tombol 'Tambah ke Laporan' pada setiap analisis\n3. Visualisasi akan otomatis disertakan dalam laporan\n4. Download laporan lengkap dalam format R Markdown atau PDF")
-    }
+  report_items$content[[item_id]] <- list(
+    type = "frequency_table",
+    title = paste("Tabel Frekuensi:", input$cat_var_explore),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    contents <- character(0)
-    viz_count <- 0
+  showNotification("Tabel frekuensi berhasil ditambahkan ke laporan!", type = "message")
+})
 
-    for (i in seq_along(report_items$content)) {
-      item <- report_items$content[[i]]
-      contents <- c(contents, paste0(i, ". ", item$title, " (", item$type, ")"))
 
-      # Count visualizations
-      if (item$type %in% c("exploration", "choropleth", "spatial", "regression", "categorization", "correlation", "normality", "anova")) { # Added correlation, normality, anova
-        viz_count <- viz_count + 1
-      }
-    }
 
-    summary_text <- paste0(
-      "KONTEN LAPORAN:\n",
-      paste(contents, collapse = "\n"),
-      "\n\n",
-      "RINGKASAN:\n",
-      "- Total analisis: ", length(report_items$content), "\n",
-      "- Analisis dengan visualisasi: ", viz_count, "\n\n",
-      "CATATAN: Pastikan untuk mendownload semua visualisasi secara terpisah sebelum menyusun laporan final."
+# Add crosstab table to report
+observeEvent(input$add_crosstab_to_report, {
+  req(input$cat_var1, input$cat_var2)
+
+  report_items$counter <- report_items$counter + 1
+  item_id <- paste0("crosstab_", report_items$counter)
+
+  content <- isolate({
+    data <- categorized_data()
+    var1 <- input$cat_var1
+    var2 <- input$cat_var2
+
+    crosstab <- table(data[[var1]], data[[var2]])
+    prop_crosstab <- prop.table(crosstab) * 100
+
+    table_text <- paste0(
+      "## Tabulasi Silang: ", var1, " vs ", var2, "\n\n",
+      "### Frekuensi:\n",
+      "```\n",
+      paste(capture.output(print(crosstab)), collapse = "\n"),
+      "\n```\n\n",
+      "### Persentase:\n",
+      "```\n",
+      paste(capture.output(print(round(prop_crosstab, 2))), collapse = "\n"),
+      "\n```\n\n"
     )
 
-    return(summary_text)
+    if (min(crosstab) >= 5) {
+      chi_test <- chisq.test(crosstab)
+      table_text <- paste0(
+        table_text,
+        "**Uji Chi-square:**\n",
+        "- Chi-square statistic: ", round(chi_test$statistic, 4), "\n",
+        "- p-value: ", format(chi_test$p.value, scientific = TRUE), "\n",
+        "- Kesimpulan: ",
+        if (chi_test$p.value < 0.05) {
+          "Ada hubungan signifikan antara kedua variabel"
+        } else {
+          "Tidak ada hubungan signifikan antara kedua variabel"
+        }, "\n\n"
+      )
+    } else {
+      table_text <- paste0(
+        table_text,
+        "**Catatan:** Uji Chi-square tidak dapat dilakukan karena ada sel dengan frekuensi < 5.\n\n"
+      )
+    }
+
+    table_text <- paste0(
+      table_text,
+      "**Interpretasi:** Tabulasi silang menunjukkan hubungan antara ", var1, " dan ", var2,
+      ". Total observasi: ", sum(crosstab), ".\n\n"
+    )
+
+    table_text
   })
 
-  # Comprehensive cleanup function
-  cleanup_all_plots <- function() {
-    cleaned_files <- 0
+  report_items$content[[item_id]] <- list(
+    type = "crosstab",
+    title = paste("Tabulasi Silang:", input$cat_var1, "vs", input$cat_var2),
+    content = content,
+    timestamp = Sys.time()
+  )
 
-    # 1. Clean temp_plots directory
-    if (dir.exists("temp_plots")) {
-      plot_files_temp <- list.files("temp_plots", pattern = "\\.png$", full.names = TRUE)
-      if (length(plot_files_temp) > 0) {
-        file.remove(plot_files_temp)
-        cleaned_files <- cleaned_files + length(plot_files_temp)
-      }
-    }
+  showNotification("Tabulasi silang berhasil ditambahkan ke laporan!", type = "message")
+})
 
-    # 2. Clean working directory (parent folder) only files that are known to be copied there by download_pdf_report
-    # This specifically targets files that might be copied for PDF generation.
-    copied_pattern_files <- list.files(".", pattern = "^(exploration_|correlation_|normality_|categorization_|regression_|spatial_|anova_).*\\.png$", full.names = TRUE)
-    if (length(copied_pattern_files) > 0) {
-      existing_files <- copied_pattern_files[file.exists(copied_pattern_files)]
-      if (length(existing_files) > 0) {
-        file.remove(existing_files)
-        cleaned_files <- cleaned_files + length(existing_files)
-      }
-    }
 
-    return(cleaned_files)
+
+# Display current report contents
+output$report_contents <- renderText({
+  if (length(report_items$content) == 0) {
+    return("Belum ada analisis yang ditambahkan ke laporan.\n\nPETUNJUK PENGGUNAAN:\n1. Lakukan analisis di berbagai tab (Eksplorasi, Asumsi, Inferensia, Regresi)\n2. Klik tombol 'Tambah ke Laporan' pada setiap analisis\n3. Visualisasi akan otomatis disertakan dalam laporan\n4. Download laporan lengkap dalam format Word (.docx)")
   }
 
-  # Clear report with plot cleanup
-  observeEvent(input$clear_report, {
-    # Clean all plots
-    cleaned_count <- cleanup_all_plots()
+  contents <- character(0)
+  viz_count <- 0
 
-    # Clear report content
-    report_items$content <- list()
-    report_items$counter <- 0
+  for (i in seq_along(report_items$content)) {
+    item <- report_items$content[[i]]
+    contents <- c(contents, paste0(i, ". ", item$title, " (", item$type, ")"))
 
-    showNotification(paste("Laporan dibersihkan! Dihapus", cleaned_count, "file plot."), type = "message")
-  })
-
-  # =================
-  # DOWNLOAD HANDLERS FOR SPATIAL ANALYSIS
-  # =================
-
-  # Download handlers for spatial analysis
-  output$download_choropleth <- downloadHandler(
-    filename = function() {
-      paste("choropleth_", input$choropleth_var, "_", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      # Create static ggplot version of the choropleth
-      tryCatch(
-        {
-          geo_data <- indonesia_geojson()
-          sovi <- sovi_data()
-
-          if (!is.null(geo_data) && nrow(sovi) == 512 && length(geo_data) == 512) {
-            geo_data$selected_var <- sovi[[input$choropleth_var]]
-
-            # Convert to sf for ggplot
-            geo_sf <- sf::st_as_sf(geo_data)
-
-            p <- ggplot(geo_sf) +
-              geom_sf(aes(fill = selected_var), color = "white", size = 0.1) +
-              scale_fill_viridis_c(name = input$choropleth_var, na.value = "grey50") +
-              theme_void() +
-              labs(
-                title = paste("Peta Choropleth:", input$choropleth_var),
-                subtitle = "Data SUSENAS 2017"
-              ) +
-              theme(
-                plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-                plot.subtitle = element_text(size = 12, hjust = 0.5),
-                legend.position = "bottom"
-              )
-
-            ggsave(file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
-          }
-        },
-        error = function(e) {
-          # Fallback: create a simple text plot
-          p <- ggplot() +
-            annotate("text", x = 0.5, y = 0.5, label = "Error creating map", size = 6) +
-            theme_void()
-          ggsave(file, plot = p, width = 8, height = 6, dpi = 300)
-        }
-      )
+    if (item$type %in% c("exploration", "choropleth", "spatial", "regression", "categorization", "correlation", "normality", "anova")) {
+      viz_count <- viz_count + 1
     }
+  }
+
+  summary_text <- paste0(
+    "KONTEN LAPORAN:\n",
+    paste(contents, collapse = "\n"),
+    "\n\n",
+    "RINGKASAN:\n",
+    "- Total analisis: ", length(report_items$content), "\n",
+    "- Analisis dengan visualisasi: ", viz_count, "\n\n",
+    "CATATAN: Pastikan untuk mendownload semua visualisasi secara terpisah jika diperlukan."
   )
 
-  output$download_spatial <- downloadHandler(
-    filename = function() {
-      paste("spatial_scatter_", input$spatial_var1, "_vs_", input$spatial_var2, "_", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      tryCatch(
-        {
-          # Get actual spatial data and create scatter plot
-          sovi <- sovi_data()
+  return(summary_text)
+})
 
-          var1_data <- sovi[[input$spatial_var1]]
-          var2_data <- sovi[[input$spatial_var2]]
 
-          # Create scatter plot
-          p <- ggplot(sovi, aes(x = !!sym(input$spatial_var1), y = !!sym(input$spatial_var2))) +
-            geom_point(alpha = 0.6, size = 2, color = "steelblue") +
-            geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
-            theme_minimal() +
+
+cleanup_all_plots <- function() {
+  cleaned_files <- 0
+
+  if (dir.exists("temp_plots")) {
+    plot_files_temp <- list.files("temp_plots", pattern = "\\.png$", full.names = TRUE)
+    if (length(plot_files_temp) > 0) {
+      file.remove(plot_files_temp)
+      cleaned_files <- cleaned_files + length(plot_files_temp)
+    }
+  }
+  
+  return(cleaned_files)
+}
+
+# Clear report with plot cleanup
+observeEvent(input$clear_report, {
+  cleaned_count <- cleanup_all_plots()
+
+  report_items$content <- list()
+  report_items$counter <- 0
+
+  showNotification(paste("Laporan dibersihkan! Dihapus", cleaned_count, "file plot."), type = "message")
+})
+
+
+
+# =================
+# DOWNLOAD HANDLERS FOR SPATIAL ANALYSIS
+# =================
+
+output$download_choropleth <- downloadHandler(
+  filename = function() {
+    paste("choropleth_", input$choropleth_var, "_", Sys.Date(), ".png", sep = "")
+  },
+  content = function(file) {
+    tryCatch(
+      {
+        geo_data <- indonesia_geojson()
+        sovi <- sovi_data()
+
+        if (!is.null(geo_data) && nrow(sovi) == 512 && length(geo_data) == 512) {
+          geo_data$selected_var <- sovi[[input$choropleth_var]]
+          geo_sf <- sf::st_as_sf(geo_data)
+
+          p <- ggplot(geo_sf) +
+            geom_sf(aes(fill = selected_var), color = "white", size = 0.1) +
+            scale_fill_viridis_c(name = input$choropleth_var, na.value = "grey50") +
+            theme_void() +
             labs(
-              title = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
-              x = input$spatial_var1,
-              y = input$spatial_var2,
-              subtitle = paste("Korelasi:", round(cor(var1_data, var2_data, use = "complete.obs"), 4))
+              title = paste("Peta Choropleth:", input$choropleth_var),
+              subtitle = "Data SUSENAS 2017"
             ) +
             theme(
-              plot.title = element_text(size = 14, face = "bold"),
-              plot.subtitle = element_text(size = 12),
-              axis.title = element_text(size = 11)
+              plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+              plot.subtitle = element_text(size = 12, hjust = 0.5),
+              legend.position = "bottom"
             )
-
-          ggsave(file, plot = p, width = 10, height = 8, dpi = 300, bg = "white")
-        },
-        error = function(e) {
-          # Fallback error plot
-          p <- ggplot() +
-            annotate("text", x = 0.5, y = 0.5, label = paste("Error creating spatial plot:", e$message), size = 6) +
-            theme_void()
-          ggsave(file, plot = p, width = 8, height = 6, dpi = 300)
+          ggsave(file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
         }
-      )
-    }
-  )
-
-  # =================
-  # DOWNLOAD HANDLERS (EXISTING)
-  # =================
-  # Data Asli tab download handlers
-  output$download_data_summary <- downloadHandler(
-    filename = function() {
-      paste("data_summary_", Sys.Date(), ".txt", sep = "")
-    },
-    content = function(file) {
-      data <- sovi_data()
-      summary_text <- paste(
-        "Dataset Kerentanan Sosial Indonesia - SUSENAS 2017\n",
-        "===============================================\n",
-        "Jumlah observasi (kabupaten/kota):", nrow(data), "\n",
-        "Jumlah variabel:", ncol(data), "\n",
-        "Periode data: SUSENAS 2017\n",
-        "Sumber: BPS-Statistics Indonesia\n\n",
-        "Statistik Deskriptif:\n",
-        "=====================\n"
-      )
-      write(summary_text, file)
-      numeric_vars <- sapply(data, is.numeric)
-      capture.output(summary(data[numeric_vars]), file = file, append = TRUE)
-    }
-  )
-
-  output$download_raw_data <- downloadHandler(
-    filename = function() {
-      paste("raw_data_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      write.csv(sovi_data(), file, row.names = FALSE)
-    }
-  )
-
-  output$print_raw_data <- downloadHandler(
-    filename = function() {
-      paste("raw_data_print_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      data <- sovi_data()
-      write.csv(data, file, row.names = FALSE)
-    }
-  )
-
-  output$download_desc <- downloadHandler(
-    filename = function() {
-      paste("descriptive_statistics_", Sys.Date(), ".txt", sep = "")
-    },
-    content = function(file) {
-      data <- sovi_data()
-      numeric_vars <- sapply(data, is.numeric)
-      capture.output(summary(data[numeric_vars]), file = file)
-    }
-  )
-
-  output$download_corr <- downloadHandler(
-    filename = function() {
-      paste("correlation_matrix_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      data <- sovi_data()
-      numeric_vars <- sapply(data, is.numeric)
-      cor_matrix <- cor(data[numeric_vars], use = "complete.obs")
-      write.csv(cor_matrix, file)
-    }
-  )
-
-  # Download plot for general exploration
-  output$download_plot <- downloadHandler(
-    filename = function() {
-      paste("exploration_plot_", input$plot_type, "_", input$x_var, "_", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      data <- sovi_data()
-
-      if (input$plot_type == "Histogram") {
-        p <- ggplot(data, aes(x = !!sym(input$x_var))) +
-          geom_histogram(bins = 30, fill = "lightblue", alpha = 0.7) +
-          theme_minimal() +
-          labs(title = paste("Histogram of", input$x_var))
-      } else if (input$plot_type == "Boxplot") {
-        p <- ggplot(data, aes(y = !!sym(input$x_var))) +
-          geom_boxplot(fill = "lightblue", alpha = 0.7) +
-          theme_minimal() +
-          labs(title = paste("Boxplot of", input$x_var))
-      } else if (input$plot_type == "Scatter Plot") {
-        p <- ggplot(data, aes(x = !!sym(input$x_var), y = !!sym(input$y_var))) +
-          geom_point(alpha = 0.6) +
-          geom_smooth(method = "lm", se = FALSE) +
-          theme_minimal() +
-          labs(title = paste("Scatter Plot:", input$x_var, "vs", input$y_var))
-      } else if (input$plot_type == "Density Plot") {
-        p <- ggplot(data, aes(x = !!sym(input$x_var))) +
-          geom_density(fill = "lightblue", alpha = 0.7) +
-          theme_minimal() +
-          labs(title = paste("Density Plot of", input$x_var))
+      },
+      error = function(e) {
+        p <- ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = "Error creating map", size = 6) +
+          theme_void()
+        ggsave(file, plot = p, width = 8, height = 6, dpi = 300)
       }
+    )
+  }
+)
 
-      ggsave(file, plot = p, width = 10, height = 6, dpi = 300)
-    }
-  )
+output$download_spatial <- downloadHandler(
+  filename = function() {
+    paste("spatial_scatter_", input$spatial_var1, "_vs_", input$spatial_var2, "_", Sys.Date(), ".png", sep = "")
+  },
+  content = function(file) {
+    tryCatch(
+      {
+        sovi <- sovi_data()
+        var1_data <- sovi[[input$spatial_var1]]
+        var2_data <- sovi[[input$spatial_var2]]
 
-  # Download regression results (enhanced with plots)
-  output$download_regression <- downloadHandler(
-    filename = function() {
-      paste("regression_analysis_", input$reg_response, "_", Sys.Date(), ".txt", sep = "")
-    },
-    content = function(file) {
-      req(input$reg_predictors)
-
-      tryCatch(
-        {
-          data <- sovi_data()
-          formula_str <- paste(input$reg_response, "~", paste(input$reg_predictors, collapse = " + "))
-          model <- lm(as.formula(formula_str), data = data)
-
-          # Create diagnostic plots
-          png_file <- gsub("\\.txt$", "_diagnostics.png", file)
-          png(png_file, width = 12, height = 8, units = "in", res = 300)
-          par(mfrow = c(2, 2))
-          plot(model)
-          dev.off()
-
-          # Capture all regression output
-          output_text <- paste(
-            "ANALISIS REGRESI LINEAR\n",
-            "======================\n\n",
-            "Formula: ", formula_str, "\n\n",
-            "SUMMARY MODEL:\n",
-            paste(capture.output(summary(model)), collapse = "\n"),
-            "\n\n",
-            "UJI ASUMSI:\n",
-            paste(capture.output({
-              cat("Durbin-Watson Test (Independence):\n")
-              print(dwtest(model))
-              cat("\nBreusch-Pagan Test (Homoscedasticity):\n")
-              print(bptest(model))
-              cat("\nShapiro-Wilk Test (Normality of Residuals):\n")
-              if (length(residuals(model)) <= 5000) {
-                print(shapiro.test(residuals(model)))
-              } else {
-                cat("Sample too large for Shapiro-Wilk test\n")
-              }
-            }), collapse = "\n"),
-            "\n\nCATATAN: File diagnostic plots tersimpan sebagai: ", basename(png_file),
-            "\n\nTanggal analisis: ", Sys.Date()
-          )
-
-          writeLines(output_text, file)
-        },
-        error = function(e) {
-          writeLines(paste("Error in regression analysis:", e$message), file)
-        }
-      )
-    }
-  )
-
-  # Download categorized data
-  output$download_categorized_data <- downloadHandler(
-    filename = function() {
-      paste("categorized_data_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      if (input$categorize > 0) {
-        data <- categorized_data()
-        write.csv(data, file, row.names = FALSE)
-      }
-    }
-  )
-
-  # Print categorized data (opens in new tab)
-  output$print_categorized_data <- downloadHandler(
-    filename = function() {
-      paste("categorized_data_print_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      if (input$categorize > 0) {
-        data <- categorized_data()
-        write.csv(data, file, row.names = FALSE)
-      }
-    }
-  )
-
-  # Download categorical plot (simplified)
-  output$download_cat_plot <- downloadHandler(
-    filename = function() {
-      paste("categorical_plot_", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      if (input$categorize > 0 && !is.null(input$cat_var_explore)) {
-        data <- categorized_data()
-        cat_var <- input$cat_var_explore
-
-        # Simple frequency bar chart
-        p <- ggplot(data, aes(x = !!sym(cat_var), fill = !!sym(cat_var))) +
-          geom_bar(alpha = 0.7, color = "white", size = 0.5) +
+        p <- ggplot(sovi, aes(x = !!sym(input$spatial_var1), y = !!sym(input$spatial_var2))) +
+          geom_point(alpha = 0.6, size = 2, color = "steelblue") +
+          geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
           theme_minimal() +
           labs(
-            title = paste("Distribusi Frekuensi:", cat_var),
-            x = cat_var,
-            y = "Frekuensi"
+            title = paste("Analisis Spasial:", input$spatial_var1, "vs", input$spatial_var2),
+            x = input$spatial_var1,
+            y = input$spatial_var2,
+            subtitle = paste("Korelasi:", round(cor(var1_data, var2_data, use = "complete.obs"), 4))
           ) +
           theme(
-            legend.position = "none",
             plot.title = element_text(size = 14, face = "bold"),
-            axis.text.x = element_text(angle = 45, hjust = 1)
-          ) +
-          scale_fill_brewer(type = "qual", palette = "Set3")
-
-        ggsave(file, plot = p, width = 10, height = 6, dpi = 300, bg = "white")
-      }
-    }
-  )
-
-  # Download frequency table
-  output$download_freq_table <- downloadHandler(
-    filename = function() {
-      paste("frequency_table_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      if (input$categorize > 0 && !is.null(input$cat_var_explore)) {
-        data <- categorized_data()
-        cat_var <- input$cat_var_explore
-
-        freq_data <- data %>%
-          count(!!sym(cat_var)) %>%
-          mutate(
-            Percentage = round(n / sum(n) * 100, 2),
-            `Cumulative Freq` = cumsum(n),
-            `Cumulative %` = round(cumsum(n) / sum(n) * 100, 2)
-          ) %>%
-          rename(
-            Category = !!sym(cat_var),
-            Frequency = n
+            plot.subtitle = element_text(size = 12),
+            axis.title = element_text(size = 11)
           )
-
-        write.csv(freq_data, file, row.names = FALSE)
+        ggsave(file, plot = p, width = 10, height = 8, dpi = 300, bg = "white")
+      },
+      error = function(e) {
+        p <- ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = paste("Error creating spatial plot:", e$message), size = 6) +
+          theme_void()
+        ggsave(file, plot = p, width = 8, height = 6, dpi = 300)
       }
+    )
+  }
+)
+
+
+
+# =================
+# DOWNLOAD HANDLERS (EXISTING)
+# =================
+output$download_data_summary <- downloadHandler(
+  filename = function() {
+    paste("data_summary_", Sys.Date(), ".txt", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+    summary_text <- paste(
+      "Dataset Kerentanan Sosial Indonesia - SUSENAS 2017\n",
+      "===============================================\n",
+      "Jumlah observasi (kabupaten/kota):", nrow(data), "\n",
+      "Jumlah variabel:", ncol(data), "\n",
+      "Periode data: SUSENAS 2017\n",
+      "Sumber: BPS-Statistics Indonesia\n\n",
+      "Statistik Deskriptif:\n",
+      "=====================\n"
+    )
+    write(summary_text, file)
+    numeric_vars <- sapply(data, is.numeric)
+    capture.output(summary(data[numeric_vars]), file = file, append = TRUE)
+  }
+)
+
+output$download_raw_data <- downloadHandler(
+  filename = function() {
+    paste("raw_data_", Sys.Date(), ".csv", sep = "")
+  },
+  content = function(file) {
+    write.csv(sovi_data(), file, row.names = FALSE)
+  }
+)
+
+output$print_raw_data <- downloadHandler(
+  filename = function() {
+    paste("raw_data_print_", Sys.Date(), ".csv", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+    write.csv(data, file, row.names = FALSE)
+  }
+)
+
+output$download_desc <- downloadHandler(
+  filename = function() {
+    paste("descriptive_statistics_", Sys.Date(), ".txt", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+    numeric_vars <- sapply(data, is.numeric)
+    capture.output(summary(data[numeric_vars]), file = file)
+  }
+)
+
+output$download_corr <- downloadHandler(
+  filename = function() {
+    paste("correlation_matrix_", Sys.Date(), ".csv", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+    numeric_vars <- sapply(data, is.numeric)
+    cor_matrix <- cor(data[numeric_vars], use = "complete.obs")
+    write.csv(cor_matrix, file)
+  }
+)
+
+output$download_plot <- downloadHandler(
+  filename = function() {
+    paste("exploration_plot_", input$plot_type, "_", input$x_var, "_", Sys.Date(), ".png", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+
+    if (input$plot_type == "Histogram") {
+      p <- ggplot(data, aes(x = !!sym(input$x_var))) +
+        geom_histogram(bins = 30, fill = "lightblue", alpha = 0.7) +
+        theme_minimal() +
+        labs(title = paste("Histogram of", input$x_var))
+    } else if (input$plot_type == "Boxplot") {
+      p <- ggplot(data, aes(y = !!sym(input$x_var))) +
+        geom_boxplot(fill = "lightblue", alpha = 0.7) +
+        theme_minimal() +
+        labs(title = paste("Boxplot of", input$x_var))
+    } else if (input$plot_type == "Scatter Plot") {
+      p <- ggplot(data, aes(x = !!sym(input$x_var), y = !!sym(input$y_var))) +
+        geom_point(alpha = 0.6) +
+        geom_smooth(method = "lm", se = FALSE) +
+        theme_minimal() +
+        labs(title = paste("Scatter Plot:", input$x_var, "vs", input$y_var))
+    } else if (input$plot_type == "Density Plot") {
+      p <- ggplot(data, aes(x = !!sym(input$x_var))) +
+        geom_density(fill = "lightblue", alpha = 0.7) +
+        theme_minimal() +
+        labs(title = paste("Density Plot of", input$x_var))
     }
-  )
+    ggsave(file, plot = p, width = 10, height = 6, dpi = 300)
+  }
+)
 
-  # Download crosstab
-  output$download_crosstab <- downloadHandler(
-    filename = function() {
-      paste("crosstab_", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      if (input$categorize > 0 && !is.null(input$cat_var1) && !is.null(input$cat_var2)) {
-        data <- categorized_data()
-        crosstab <- table(data[[input$cat_var1]], data[[input$cat_var2]])
-        crosstab_df <- as.data.frame.matrix(crosstab)
-        crosstab_df$Total <- rowSums(crosstab_df)
-        crosstab_df <- rbind(crosstab_df, Total = colSums(crosstab_df))
-
-        write.csv(crosstab_df, file)
-      }
-    }
-  )
-
-  # =================
-  # REPORT DOWNLOAD HANDLERS
-  # =================
-
-  # Download PDF report
-  output$download_pdf_report <- downloadHandler(
-    filename = function() {
-      paste("laporan_analisis_", Sys.Date(), ".pdf", sep = "")
-    },
-    content = function(file) {
-      # Ensure TinyTeX is installed
-      if (!tinytex::is_tinytex()) {
-        showNotification("Installing TinyTeX for PDF generation...", type = "message")
-        tinytex::install_tinytex()
-      }
-
-      # Create a temporary directory for rendering to avoid polluting main working directory
-      # and to ensure a clean render environment
-      temp_render_dir <- tempdir()
-      original_wd <- getwd() # Save original working directory
-
-      # Change working directory to the temporary render directory
-      setwd(temp_render_dir)
-
-      # Copy all necessary plot files from temp_plots to the new temp_render_dir
-      temp_plots_source_dir <- file.path(original_wd, "temp_plots")
-
-      if (dir.exists(temp_plots_source_dir)) {
-        plot_files_in_temp_plots <- list.files(temp_plots_source_dir, pattern = "\\.png$", full.names = TRUE)
-        if (length(plot_files_in_temp_plots) > 0) {
-          # Copy files to the new temporary rendering directory
-          file.copy(plot_files_in_temp_plots, temp_render_dir, overwrite = TRUE)
-        }
-      }
-
-      # Create temporary R Markdown file within the temp_render_dir
-      temp_rmd_path <- file.path(temp_render_dir, "report.Rmd")
-
-      # Try to read main template, fallback to simple template
-      template_file <- file.path(original_wd, "report_template.Rmd") # Assume template is in original WD
-      if (!file.exists(template_file)) {
-        template_file <- file.path(original_wd, "report_template_simple.Rmd")
-      }
-
-      # Load template content
-      template_content <- tryCatch(
-        {
-          readLines(template_file)
-        },
-        error = function(e) {
-          # Ultimate fallback template (as you already have)
-          c(
-            "---",
-            "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
-            "output:",
-            "  pdf_document:",
-            "    latex_engine: xelatex",
-            "    toc: true",
-            "    number_sections: true",
-            "    keep_tex: true",
-            "header-includes:",
-            "  - \\usepackage{fontspec}",
-            "  - \\usepackage{polyglossia}",
-            "  - \\setmainlanguage{indonesian}",
-            "---",
-            "",
-            "# Ringkasan Eksekutif",
-            "",
-            "{{{executive_summary}}}",
-            "",
-            "{{{metadata_section}}}",
-            "",
-            "{{{summary_section}}}",
-            "",
-            "{{{content_sections}}}",
-            "",
-            "# Kesimpulan",
-            "",
-            "{{{conclusions}}}",
-            "",
-            "# Rekomendasi",
-            "",
-            "{{{recommendations}}}",
-            "",
-            "---",
-            "Tanggal: `r Sys.Date()`"
-          )
-        }
-      )
-
-      # Prepare content sections for PDF with integrated visualizations
-      content_sections <- ""
-      if (length(report_items$content) > 0) {
-        content_sections <- paste0(content_sections, "\n# ANALISIS YANG DISERTAKAN\n\n")
-        content_sections <- paste0(content_sections, "**Laporan Lengkap:** Semua visualisasi dan analisis terintegrasi langsung dalam dokumen PDF ini.\n\n")
-        content_sections <- paste0(content_sections, "---\n\n")
-
-        for (item in report_items$content) {
-          # Crucial: Ensure image paths are just filenames for LaTeX to find them in the temp_render_dir
-          item_content <- item$content
-          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
-
-          content_sections <- paste0(content_sections, "\n", item_content, "\n")
-        }
-      } else {
-        content_sections <- "\n# Analisis\n\nBelum ada analisis yang ditambahkan ke laporan.\n\n"
-      }
-
-      # Prepare metadata section (no changes needed here, as it's text)
-      metadata_section <- ""
-      if (input$include_metadata) {
+output$download_regression <- downloadHandler(
+  filename = function() {
+    paste("regression_analysis_", input$reg_response, "_", Sys.Date(), ".txt", sep = "")
+  },
+  content = function(file) {
+    req(input$reg_predictors)
+    tryCatch(
+      {
         data <- sovi_data()
-        metadata_section <- paste0(
-          "\n# Metadata Dataset\n\n",
-          "**Sumber Data:** SUSENAS 2017 - BPS Statistics Indonesia\n\n",
-          "**Jumlah Observasi:** ", nrow(data), " kabupaten/kota\n\n",
-          "**Jumlah Variabel:** ", ncol(data), "\n\n",
-          "**Variabel yang Tersedia:**\n",
-          paste("- ", names(data), collapse = "\n"), "\n\n",
-          "**Deskripsi Variabel:**\n",
-          "- CHILDREN: Persentase populasi di bawah 5 tahun\n",
-          "- FEMALE: Persentase populasi perempuan\n",
-          "- ELDERLY: Persentase populasi 65 tahun ke atas\n",
-          "- FHEAD: Persentase rumah tangga dengan kepala keluarga perempuan\n",
-          "- FAMILYSIZE: Rata-rata jumlah anggota rumah tangga\n",
-          "- NOELECTRIC: Persentase rumah tangga tanpa listrik\n",
-          "- LOWEDU: Persentase populasi 15+ dengan pendidikan rendah\n",
-          "- GROWTH: Persentase perubahan populasi\n",
-          "- POVERTY: Persentase penduduk miskin\n",
-          "- ILLITERATE: Persentase populasi yang buta huruf\n",
-          "- NOTRAINING: Persentase rumah tangga tanpa pelatihan bencana\n",
-          "- DPRONE: Persentase rumah tangga di area rawan bencana\n",
-          "- RENTED: Persentase rumah tangga yang menyewa rumah\n",
-          "- NOSEWER: Persentase rumah tangga tanpa sistem drainase\n",
-          "- TAPWATER: Persentase rumah tangga dengan air keran\n",
-          "- POPULATION: Jumlah populasi\n\n"
+        formula_str <- paste(input$reg_response, "~", paste(input$reg_predictors, collapse = " + "))
+        model <- lm(as.formula(formula_str), data = data)
+        png_file <- gsub("\\.txt$", "_diagnostics.png", file)
+        png(png_file, width = 12, height = 8, units = "in", res = 300)
+        par(mfrow = c(2, 2))
+        plot(model)
+        dev.off()
+
+        output_text <- paste(
+          "ANALISIS REGRESI LINEAR\n", "======================\n\n",
+          "Formula: ", formula_str, "\n\n",
+          "SUMMARY MODEL:\n", paste(capture.output(summary(model)), collapse = "\n"), "\n\n",
+          "UJI ASUMSI:\n", paste(capture.output({
+            cat("Durbin-Watson Test (Independence):\n"); print(dwtest(model))
+            cat("\nBreusch-Pagan Test (Homoscedasticity):\n"); print(bptest(model))
+            cat("\nShapiro-Wilk Test (Normality of Residuals):\n")
+            if (length(residuals(model)) <= 5000) { print(shapiro.test(residuals(model))) } else { cat("Sample too large for Shapiro-Wilk test\n") }
+          }), collapse = "\n"),
+          "\n\nCATATAN: File diagnostic plots tersimpan sebagai: ", basename(png_file),
+          "\n\nTanggal analisis: ", Sys.Date()
         )
-      }
+        writeLines(output_text, file)
+      },
+      error = function(e) { writeLines(paste("Error in regression analysis:", e$message), file) }
+    )
+  }
+)
 
-      # Prepare summary section (no changes needed here, as it's text)
-      summary_section <- ""
-      if (input$include_summary) {
-        summary_section <- "\n# Ringkasan Statistik\n\nStatistik deskriptif telah disertakan dalam analisis individual.\n\n"
-      }
-
-      # Replace placeholders in template_content
-      template_content <- gsub("\\{\\{\\{include_code\\}\\}\\}", tolower(as.character(input$include_code)), template_content)
-      template_content <- gsub(
-        "\\{\\{\\{executive_summary\\}\\}\\}",
-        paste0("Laporan ini berisi ", length(report_items$content), " analisis yang telah dipilih oleh pengguna."),
-        template_content
-      )
-      template_content <- gsub("\\{\\{\\{metadata_section\\}\\}\\}", metadata_section, template_content)
-      template_content <- gsub("\\{\\{\\{summary_section\\}\\}\\}", summary_section, template_content)
-      template_content <- gsub("\\{\\{\\{content_sections\\}\\}\\}", content_sections, template_content)
-      template_content <- gsub(
-        "\\{\\{\\{conclusions\\}\\}\\}",
-        "Kesimpulan akan diperbarui berdasarkan analisis yang telah dilakukan.",
-        template_content
-      )
-      template_content <- gsub(
-        "\\{\\{\\{recommendations\\}\\}\\}",
-        "Rekomendasi akan dikembangkan berdasarkan temuan analisis.",
-        template_content
-      )
-
-      # Write the prepared content to the temporary Rmd file
-      writeLines(template_content, temp_rmd_path)
-
-      tryCatch(
-        {
-          # Render to PDF
-          rmarkdown::render(
-            input = temp_rmd_path,
-            output_format = rmarkdown::pdf_document(
-              latex_engine = "xelatex",
-              toc = TRUE,
-              number_sections = TRUE,
-              keep_tex = TRUE
-            ),
-            output_file = file,
-            quiet = FALSE, # Set to TRUE for production to suppress messages
-            envir = new.env() # Use a fresh environment for rendering
-          )
-
-          showNotification("PDF berhasil dibuat! File plot tetap tersimpan untuk penggunaan berikutnya.", type = "message")
-        },
-        error = function(e) {
-          showNotification(paste("Error creating PDF:", e$message), type = "error")
-          # Log the full error for debugging
-          cat(paste("Full PDF error:", e$message, "\n"))
-
-          # No fallback to markdown directly in downloadHandler's content function,
-          # as 'file' must be a PDF. User can choose Rmd download if PDF fails.
-        },
-        finally = {
-          # Clean up temporary Rmd file and auxiliary files regardless of success/failure
-          if (file.exists(temp_rmd_path)) file.remove(temp_rmd_path)
-          temp_base <- tools::file_path_sans_ext(temp_rmd_path)
-          aux_files <- c(
-            paste0(temp_base, ".tex"),
-            paste0(temp_base, ".log"),
-            paste0(temp_base, ".aux"),
-            paste0(temp_base, ".out"),
-            paste0(temp_base, ".toc")
-          )
-          for (aux_file in aux_files) {
-            if (file.exists(aux_file)) {
-              file.remove(aux_file)
-            }
-          }
-
-          # IMPORTANT: Restore original working directory after download handler finishes
-          setwd(original_wd)
-        }
-      )
-
-      # Clear report list after PDF download (but don't clean up plot files in temp_plots,
-      # as they might be needed for subsequent PDF renders or Rmd downloads)
-      report_items$content <- list()
-      report_items$counter <- 0
+output$download_categorized_data <- downloadHandler(
+  filename = function() { paste("categorized_data_", Sys.Date(), ".csv", sep = "") },
+  content = function(file) {
+    if (input$categorize > 0) {
+      data <- categorized_data()
+      write.csv(data, file, row.names = FALSE)
     }
-  )
+  }
+)
 
-  output$download_full_report <- downloadHandler(
-    filename = function() {
-      paste("full_analysis_report_", Sys.Date(), ".txt", sep = "")
-    },
-    content = function(file) {
-      # Create a comprehensive text report
-      data <- sovi_data()
-
-      text_content <- paste0(
-        "LAPORAN ANALISIS KERENTANAN SOSIAL INDONESIA\n",
-        "============================================\n\n",
-        "STATISTIK DESKRIPTIF\n",
-        "-------------------\n",
-        paste(capture.output(summary(data)), collapse = "\n"), "\n\n",
-        "INFORMASI DATASET\n",
-        "----------------\n",
-        "Jumlah observasi: ", nrow(data), "\n",
-        "Jumlah variabel: ", ncol(data), "\n",
-        "Tanggal analisis: ", Sys.Date(), "\n\n",
-        "Sumber: SUSENAS 2017 - BPS Statistics Indonesia\n"
-      )
-
-      writeLines(text_content, file)
+output$print_categorized_data <- downloadHandler(
+  filename = function() { paste("categorized_data_print_", Sys.Date(), ".csv", sep = "") },
+  content = function(file) {
+    if (input$categorize > 0) {
+      data <- categorized_data()
+      write.csv(data, file, row.names = FALSE)
     }
-  )
+  }
+)
+
+output$download_cat_plot <- downloadHandler(
+  filename = function() { paste("categorical_plot_", Sys.Date(), ".png", sep = "") },
+  content = function(file) {
+    if (input$categorize > 0 && !is.null(input$cat_var_explore)) {
+      data <- categorized_data()
+      cat_var <- input$cat_var_explore
+      p <- ggplot(data, aes(x = !!sym(cat_var), fill = !!sym(cat_var))) +
+        geom_bar(alpha = 0.7, color = "white", size = 0.5) +
+        theme_minimal() +
+        labs(title = paste("Distribusi Frekuensi:", cat_var), x = cat_var, y = "Frekuensi") +
+        theme(legend.position = "none", plot.title = element_text(size = 14, face = "bold"), axis.text.x = element_text(angle = 45, hjust = 1)) +
+        scale_fill_brewer(type = "qual", palette = "Set3")
+      ggsave(file, plot = p, width = 10, height = 6, dpi = 300, bg = "white")
+    }
+  }
+)
+
+output$download_freq_table <- downloadHandler(
+  filename = function() { paste("frequency_table_", Sys.Date(), ".csv", sep = "") },
+  content = function(file) {
+    if (input$categorize > 0 && !is.null(input$cat_var_explore)) {
+      data <- categorized_data()
+      cat_var <- input$cat_var_explore
+      freq_data <- data %>% count(!!sym(cat_var)) %>%
+        mutate(Percentage = round(n / sum(n) * 100, 2), `Cumulative Freq` = cumsum(n), `Cumulative %` = round(cumsum(n) / sum(n) * 100, 2)) %>%
+        rename(Category = !!sym(cat_var), Frequency = n)
+      write.csv(freq_data, file, row.names = FALSE)
+    }
+  }
+)
+
+output$download_crosstab <- downloadHandler(
+  filename = function() { paste("crosstab_", Sys.Date(), ".csv", sep = "") },
+  content = function(file) {
+    if (input$categorize > 0 && !is.null(input$cat_var1) && !is.null(input$cat_var2)) {
+      data <- categorized_data()
+      crosstab <- table(data[[input$cat_var1]], data[[input$cat_var2]])
+      crosstab_df <- as.data.frame.matrix(crosstab)
+      crosstab_df$Total <- rowSums(crosstab_df)
+      crosstab_df <- rbind(crosstab_df, Total = colSums(crosstab_df))
+      write.csv(crosstab_df, file)
+    }
+  }
+)
+
+
+
+# =================
+# REPORT DOWNLOAD HANDLERS (MODIFIED FOR DOCX)
+# =================
+
+# Download Word (.docx) report
+output$download_doc_report <- downloadHandler(
+  filename = function() {
+    paste("laporan_analisis_", Sys.Date(), ".docx", sep = "")
+  },
+  content = function(file) {
+    # Gunakan direktori sementara untuk proses render agar tidak mengotori direktori kerja
+    temp_render_dir <- tempdir()
+    original_wd <- getwd()
+    setwd(temp_render_dir)
+
+    # Salin semua file plot yang dibutuhkan dari 'temp_plots' ke direktori render sementara
+    temp_plots_source_dir <- file.path(original_wd, "temp_plots")
+    if (dir.exists(temp_plots_source_dir)) {
+      plot_files_in_temp_plots <- list.files(temp_plots_source_dir, pattern = "\\.png$", full.names = TRUE)
+      if (length(plot_files_in_temp_plots) > 0) {
+        file.copy(plot_files_in_temp_plots, temp_render_dir, overwrite = TRUE)
+      }
+    }
+
+    # Buat file R Markdown sementara di dalam direktori render
+    temp_rmd_path <- file.path(temp_render_dir, "report.Rmd")
+
+    # Siapkan konten dari semua item laporan
+    content_sections <- ""
+    if (length(report_items$content) > 0) {
+      for (item in report_items$content) {
+        # Pastikan path gambar hanya nama file agar rmarkdown dapat menemukannya
+        item_content <- item$content
+        item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
+        content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
+      }
+    } else {
+      content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
+    }
+
+    # Gabungkan header YAML untuk Word dengan konten laporan
+    full_rmd_content <- paste(
+      "",
+      "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
+      "author: 'Dihasilkan oleh Aplikasi Shiny'",
+      paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
+      "output: word_document",
+      "",
+      "\n# Ringkasan Analisis\n",
+      "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
+      content_sections,
+      sep = "\n"
+    )
+
+    # Tulis konten Rmd ke file sementara
+    writeLines(full_rmd_content, temp_rmd_path, useBytes = TRUE)
+
+    # Render Rmd ke DOCX
+    tryCatch({
+      rmarkdown::render(
+        input = temp_rmd_path,
+        output_file = file,
+        quiet = TRUE,
+        envir = new.env()
+      )
+      showNotification("Laporan Word (.docx) berhasil dibuat!", type = "message")
+    }, error = function(e) {
+      showNotification(paste("Error saat membuat laporan Word:", e$message), type = "error")
+      cat(paste("Full DOCX error:", e$message, "\n"))
+    }, finally = {
+      # Kembalikan direktori kerja ke aslinya
+      setwd(original_wd)
+    })
+    
+    # Kosongkan item laporan setelah diunduh
+    report_items$content <- list()
+    report_items$counter <- 0
+  }
+)
+
+
+# Download Full Text Report (Plain Text)
+output$download_full_report <- downloadHandler(
+  filename = function() {
+    paste("full_analysis_report_", Sys.Date(), ".txt", sep = "")
+  },
+  content = function(file) {
+    data <- sovi_data()
+    text_content <- paste0(
+      "LAPORAN ANALISIS KERENTANAN SOSIAL INDONESIA\n",
+      "============================================\n\n",
+      "STATISTIK DESKRIPTIF\n",
+      "-\n",
+      paste(capture.output(summary(data)), collapse = "\n"), "\n\n",
+      "INFORMASI DATASET\n",
+      "-\n",
+      "Jumlah observasi: ", nrow(data), "\n",
+      "Jumlah variabel: ", ncol(data), "\n",
+      "Tanggal analisis: ", Sys.Date(), "\n\n",
+      "Sumber: SUSENAS 2017 - BPS Statistics Indonesia\n"
+    )
+    writeLines(text_content, file)
+  }
+)
 }

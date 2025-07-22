@@ -1,0 +1,10 @@
+name: rshiny-project-uas
+title:
+username: naranggak
+account: naranggak
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15107773
+bundleId: 10654005
+url: https://naranggak.shinyapps.io/rshiny-project-uas/
+version: 1
