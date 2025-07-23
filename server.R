@@ -2605,6 +2605,7 @@ observeEvent(input$generate_choropleth, {
   # DOWNLOAD HANDLERS
   # =================
 
+
   output$download_spatial <- downloadHandler(
     filename = function() {
       paste("spatial_scatter_", input$spatial_var1, "_vs_", input$spatial_var2, "_", Sys.Date(), ".png", sep = "")
@@ -2854,61 +2855,18 @@ observeEvent(input$generate_choropleth, {
   # REPORT DOWNLOAD HANDLERS (MODIFIED FOR DOCX)
   # =================
 
-  # Download RMD (.rmd) Word (.docx) report
-output$download_report <- downloadHandler(
-  filename = function() {
-    format_type <- input$report_format  # "rmd" atau "docx"
-    if (format_type == "rmd") {
-      paste("laporan_analisis_", Sys.Date(), ".Rmd", sep = "")
-    } else {
+  # Download Word (.docx) report
+  output$download_doc_report <- downloadHandler(
+    filename = function() {
       paste("laporan_analisis_", Sys.Date(), ".docx", sep = "")
-    }
-  },
-  content = function(file) {
-    format_type <- input$report_format
-    
-    # Siapkan konten dari semua item laporan
-    content_sections <- ""
-    if (length(report_items$content) > 0) {
-      for (item in report_items$content) {
-        item_content <- item$content
-        # Sesuaikan path gambar berdasarkan format
-        if (format_type == "rmd") {
-          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](temp_plots/\\2)", item_content)
-        } else {
-          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
-        }
-        content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
-      }
-    } else {
-      content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
-    }
-
-    # Buat konten R Markdown
-    full_rmd_content <- paste(
-      "---",
-      "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
-      "author: 'Dihasilkan oleh Aplikasi Shiny'",
-      paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
-      "output: word_document",
-      "---",
-      "\n# Ringkasan Analisis\n",
-      "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
-      content_sections,
-      sep = "\n"
-    )
-
-    if (format_type == "rmd") {
-      # Langsung tulis file RMD
-      writeLines(full_rmd_content, file, useBytes = TRUE)
-      showNotification("File R Markdown (.Rmd) berhasil dibuat!", type = "message")
-    } else {
-      # Render ke DOCX (proses yang sudah ada)
+    },
+    content = function(file) {
+      # Gunakan direktori sementara untuk proses render agar tidak mengotori direktori kerja
       temp_render_dir <- tempdir()
       original_wd <- getwd()
       setwd(temp_render_dir)
 
-      # Salin plot files
+      # Salin semua file plot yang dibutuhkan dari 'temp_plots' ke direktori render sementara
       temp_plots_source_dir <- file.path(original_wd, "temp_plots")
       if (dir.exists(temp_plots_source_dir)) {
         plot_files_in_temp_plots <- list.files(temp_plots_source_dir, pattern = "\\.png$", full.names = TRUE)
@@ -2917,9 +2875,40 @@ output$download_report <- downloadHandler(
         }
       }
 
+      # Buat file R Markdown sementara di dalam direktori render
       temp_rmd_path <- file.path(temp_render_dir, "report.Rmd")
+
+      # Siapkan konten dari semua item laporan
+      content_sections <- ""
+      if (length(report_items$content) > 0) {
+        for (item in report_items$content) {
+          # Pastikan path gambar hanya nama file agar rmarkdown dapat menemukannya
+          item_content <- item$content
+          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
+          content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
+        }
+      } else {
+        content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
+      }
+
+      # Gabungkan header YAML untuk Word dengan konten laporan
+      full_rmd_content <- paste(
+        "---",
+        "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
+        "author: 'Dihasilkan oleh Aplikasi Shiny'",
+        paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
+        "output: word_document",
+        "---",
+        "\n# Ringkasan Analisis\n",
+        "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
+        content_sections,
+        sep = "\n"
+      )
+
+      # Tulis konten Rmd ke file sementara
       writeLines(full_rmd_content, temp_rmd_path, useBytes = TRUE)
 
+      # Render Rmd ke DOCX
       tryCatch(
         {
           rmarkdown::render(
@@ -2935,14 +2924,61 @@ output$download_report <- downloadHandler(
           cat(paste("Full DOCX error:", e$message, "\n"))
         },
         finally = {
+          # Kembalikan direktori kerja ke aslinya
           setwd(original_wd)
         }
       )
       
-      # Kosongkan item laporan setelah diunduh DOCX
+      # Kosongkan item laporan setelah diunduh
       report_items$content <- list()
       report_items$counter <- 0
     }
-  }
+  )
+  output$download_rmd_report <- downloadHandler(
+  filename = function() {
+    paste("laporan_analisis_", Sys.Date(), ".Rmd", sep = "")
+  },
+  content = function(file) {
+    tryCatch(
+      {
+        # Siapkan konten dari semua item laporan
+        content_sections <- ""
+        if (length(report_items$content) > 0) {
+          for (item in report_items$content) {
+            # Untuk file .Rmd, gunakan path relatif ke folder temp_plots
+            item_content <- item$content
+            item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](temp_plots/\\2)", item_content)
+            content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
+          }
+        } else {
+          content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
+        }
+
+        # Gabungkan header YAML untuk Word dengan konten laporan
+        full_rmd_content <- paste(
+          "---",
+          "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
+          "author: 'Dihasilkan oleh Aplikasi Shiny'",
+          paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
+          "output: word_document",
+          "---",
+          "\n# Ringkasan Analisis\n",
+          "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
+          content_sections,
+          sep = "\n"
+        )
+
+        # Tulis konten Rmd ke file yang akan diunduh
+        writeLines(full_rmd_content, file, useBytes = TRUE)
+        
+        showNotification("File R Markdown (.Rmd) berhasil dibuat!", type = "message")
+      },
+      error = function(e) {
+        showNotification(paste("Error saat membuat file R Markdown:", e$message), type = "error")
+        cat(paste("Full RMD error:", e$message, "\n"))
+      }
+    )
+  },
+  contentType = "text/plain"
 )
 }

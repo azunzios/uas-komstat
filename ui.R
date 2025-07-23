@@ -813,45 +813,44 @@ tabItem(
 
       # Download Tab
    tabItem(
-        tabName = "download",
-        fluidRow(
-          box(
-            title = "Laporan Gabungan", status = "primary", solidHeader = TRUE, width = 12,
-            h4("Manajemen Laporan Akhir"),
-            p("Laporan ini akan berisi analisis yang telah Anda tambahkan menggunakan tombol 'Tambah ke Laporan'."),
-            br(),
-            h5("Konten Laporan Saat Ini:"),
-            verbatimTextOutput("report_contents"),
-            br(),
-            fluidRow(
-              column(
-                6,
-                h5("Aksi Laporan:"),
-                actionButton("clear_report", "Bersihkan Laporan", class = "btn-warning"),
-                br(), br(),
-                selectInput("report_format", "Format Laporan:", 
-                          choices = list("Word Document (.docx)" = "docx", 
-                                        "R Markdown (.Rmd)" = "rmd"),
-                          selected = "docx"),
-                downloadButton("download_report", "Download Laporan", class = "btn-success")
-              ),
-              column(
-                6,
-                h5("Opsi Laporan:"),
-                checkboxInput("include_metadata", "Sertakan Metadata Dataset", value = TRUE),
-                checkboxInput("include_summary", "Sertakan Ringkasan Statistik", value = TRUE),
-                checkboxInput("include_code", "Sertakan Kode R", value = FALSE)
-              )
-            ),
-            br(),
-            div(
-              p(strong("DOCX:"), "Dokumen Word siap pakai (akan mengosongkan laporan setelah download)"),
-              p(strong("RMD:"), "File R Markdown untuk diedit lebih lanjut (laporan tetap tersimpan)"),
-              class = "alert alert-info"
-            )
-          )
+  tabName = "download",
+  fluidRow(
+    box(
+      title = "Laporan Gabungan", status = "primary", solidHeader = TRUE, width = 12,
+      h4("Manajemen Laporan Akhir"),
+      p("Laporan ini akan berisi analisis yang telah Anda tambahkan menggunakan tombol 'Tambah ke Laporan'."),
+      br(),
+      h5("Konten Laporan Saat Ini:"),
+      verbatimTextOutput("report_contents"),
+      br(),
+      fluidRow(
+        column(
+          6,
+          h5("Aksi Laporan:"),
+          actionButton("clear_report", "Bersihkan Laporan", class = "btn-warning"),
+          br(), br(),
+          downloadButton("download_doc_report", "Download Laporan Gabungan (.docx)", class = "btn-success"),
+          br(), br(),
+          downloadButton("download_rmd_report", "Download Template R Markdown (.Rmd)", class = "btn-info")
+        ),
+        column(
+          6,
+          h5("Opsi Laporan:"),
+          checkboxInput("include_metadata", "Sertakan Metadata Dataset", value = TRUE),
+          checkboxInput("include_summary", "Sertakan Ringkasan Statistik", value = TRUE),
+          checkboxInput("include_code", "Sertakan Kode R", value = FALSE)
         )
+      ),
+      br(),
+      div(
+        h5("Keterangan Format:"),
+        p(strong("DOCX:"), " Dokumen Word siap pakai dengan semua gambar dan format."),
+        p(strong("RMD:"), " File R Markdown yang dapat diedit dan di-render ulang. Pastikan folder 'temp_plots' tersedia saat render."),
+        class = "alert alert-info"
       )
+    )
+  )
+)
     )
   )
 )
