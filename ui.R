@@ -479,9 +479,7 @@ ui <- dashboardPage(
                 9,
                 leafletOutput("choropleth_map", height = "500px")
               )
-            ),
-            br(),
-            downloadButton("download_choropleth", "Download Peta Choropleth (.png)")
+            )
           )
         )
       ),
@@ -814,7 +812,7 @@ tabItem(
       ),
 
       # Download Tab
-      tabItem(
+   tabItem(
         tabName = "download",
         fluidRow(
           box(
@@ -831,7 +829,11 @@ tabItem(
                 h5("Aksi Laporan:"),
                 actionButton("clear_report", "Bersihkan Laporan", class = "btn-warning"),
                 br(), br(),
-                downloadButton("download_doc_report", "Download Laporan Gabungan (.doc)", class = "btn-success")
+                selectInput("report_format", "Format Laporan:", 
+                          choices = list("Word Document (.docx)" = "docx", 
+                                        "R Markdown (.Rmd)" = "rmd"),
+                          selected = "docx"),
+                downloadButton("download_report", "Download Laporan", class = "btn-success")
               ),
               column(
                 6,
@@ -842,7 +844,11 @@ tabItem(
               )
             ),
             br(),
-            p("Laporan akan dihasilkan dalam format Doc dengan semua hasil analisis dan interpretasi yang telah ditambahkan.")
+            div(
+              p(strong("DOCX:"), "Dokumen Word siap pakai (akan mengosongkan laporan setelah download)"),
+              p(strong("RMD:"), "File R Markdown untuk diedit lebih lanjut (laporan tetap tersimpan)"),
+              class = "alert alert-info"
+            )
           )
         )
       )

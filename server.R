@@ -2605,46 +2605,6 @@ observeEvent(input$generate_choropleth, {
   # DOWNLOAD HANDLERS
   # =================
 
-  output$download_choropleth <- downloadHandler(
-    filename = function() {
-      paste("choropleth_", input$choropleth_var, "_", Sys.Date(), ".png", sep = "")
-    },
-    content = function(file) {
-      tryCatch(
-        {
-          geo_data <- indonesia_geojson()
-          sovi <- sovi_data()
-
-          if (!is.null(geo_data) && nrow(sovi) == 512 && length(geo_data) == 512) {
-            geo_data$selected_var <- sovi[[input$choropleth_var]]
-            geo_sf <- sf::st_as_sf(geo_data)
-
-            p <- ggplot(geo_sf) +
-              geom_sf(aes(fill = selected_var), color = "white", size = 0.1) +
-              scale_fill_viridis_c(name = input$choropleth_var, na.value = "grey50") +
-              theme_void() +
-              labs(
-                title = paste("Peta Choropleth:", input$choropleth_var),
-                subtitle = "Data SUSENAS 2017"
-              ) +
-              theme(
-                plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-                plot.subtitle = element_text(size = 12, hjust = 0.5),
-                legend.position = "bottom"
-              )
-            ggsave(file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
-          }
-        },
-        error = function(e) {
-          p <- ggplot() +
-            annotate("text", x = 0.5, y = 0.5, label = "Error creating map", size = 6) +
-            theme_void()
-          ggsave(file, plot = p, width = 8, height = 6, dpi = 300)
-        }
-      )
-    }
-  )
-
   output$download_spatial <- downloadHandler(
     filename = function() {
       paste("spatial_scatter_", input$spatial_var1, "_vs_", input$spatial_var2, "_", Sys.Date(), ".png", sep = "")
@@ -2894,18 +2854,61 @@ observeEvent(input$generate_choropleth, {
   # REPORT DOWNLOAD HANDLERS (MODIFIED FOR DOCX)
   # =================
 
-  # Download Word (.docx) report
-  output$download_doc_report <- downloadHandler(
-    filename = function() {
+  # Download RMD (.rmd) Word (.docx) report
+output$download_report <- downloadHandler(
+  filename = function() {
+    format_type <- input$report_format  # "rmd" atau "docx"
+    if (format_type == "rmd") {
+      paste("laporan_analisis_", Sys.Date(), ".Rmd", sep = "")
+    } else {
       paste("laporan_analisis_", Sys.Date(), ".docx", sep = "")
-    },
-    content = function(file) {
-      # Gunakan direktori sementara untuk proses render agar tidak mengotori direktori kerja
+    }
+  },
+  content = function(file) {
+    format_type <- input$report_format
+    
+    # Siapkan konten dari semua item laporan
+    content_sections <- ""
+    if (length(report_items$content) > 0) {
+      for (item in report_items$content) {
+        item_content <- item$content
+        # Sesuaikan path gambar berdasarkan format
+        if (format_type == "rmd") {
+          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](temp_plots/\\2)", item_content)
+        } else {
+          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
+        }
+        content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
+      }
+    } else {
+      content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
+    }
+
+    # Buat konten R Markdown
+    full_rmd_content <- paste(
+      "---",
+      "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
+      "author: 'Dihasilkan oleh Aplikasi Shiny'",
+      paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
+      "output: word_document",
+      "---",
+      "\n# Ringkasan Analisis\n",
+      "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
+      content_sections,
+      sep = "\n"
+    )
+
+    if (format_type == "rmd") {
+      # Langsung tulis file RMD
+      writeLines(full_rmd_content, file, useBytes = TRUE)
+      showNotification("File R Markdown (.Rmd) berhasil dibuat!", type = "message")
+    } else {
+      # Render ke DOCX (proses yang sudah ada)
       temp_render_dir <- tempdir()
       original_wd <- getwd()
       setwd(temp_render_dir)
 
-      # Salin semua file plot yang dibutuhkan dari 'temp_plots' ke direktori render sementara
+      # Salin plot files
       temp_plots_source_dir <- file.path(original_wd, "temp_plots")
       if (dir.exists(temp_plots_source_dir)) {
         plot_files_in_temp_plots <- list.files(temp_plots_source_dir, pattern = "\\.png$", full.names = TRUE)
@@ -2914,40 +2917,9 @@ observeEvent(input$generate_choropleth, {
         }
       }
 
-      # Buat file R Markdown sementara di dalam direktori render
       temp_rmd_path <- file.path(temp_render_dir, "report.Rmd")
-
-      # Siapkan konten dari semua item laporan
-      content_sections <- ""
-      if (length(report_items$content) > 0) {
-        for (item in report_items$content) {
-          # Pastikan path gambar hanya nama file agar rmarkdown dapat menemukannya
-          item_content <- item$content
-          item_content <- gsub("!\\[([^\\]]*)\\]\\(.*?([^/\\\\]+\\.png)\\)", "![\\1](\\2)", item_content)
-          content_sections <- paste0(content_sections, "\n\n\n\n", item_content)
-        }
-      } else {
-        content_sections <- "\nBelum ada analisis yang ditambahkan ke laporan.\n"
-      }
-
-      # Gabungkan header YAML untuk Word dengan konten laporan
-      full_rmd_content <- paste(
-        "---",
-        "title: 'Laporan Analisis Kerentanan Sosial Indonesia'",
-        "author: 'Dihasilkan oleh Aplikasi Shiny'",
-        paste0("date: '", format(Sys.Date(), "%d %B %Y"), "'"),
-        "output: word_document",
-        "---",
-        "\n# Ringkasan Analisis\n",
-        "Dokumen ini berisi hasil analisis yang dihasilkan secara otomatis dari aplikasi analisis data. Semua visualisasi dan interpretasi yang ditambahkan oleh pengguna disertakan di bawah ini.",
-        content_sections,
-        sep = "\n"
-      )
-
-      # Tulis konten Rmd ke file sementara
       writeLines(full_rmd_content, temp_rmd_path, useBytes = TRUE)
 
-      # Render Rmd ke DOCX
       tryCatch(
         {
           rmarkdown::render(
@@ -2963,39 +2935,14 @@ observeEvent(input$generate_choropleth, {
           cat(paste("Full DOCX error:", e$message, "\n"))
         },
         finally = {
-          # Kembalikan direktori kerja ke aslinya
           setwd(original_wd)
         }
       )
       
-      # Kosongkan item laporan setelah diunduh
+      # Kosongkan item laporan setelah diunduh DOCX
       report_items$content <- list()
       report_items$counter <- 0
     }
-  )
-
-
-  # Download Full Text Report (Plain Text)
-  output$download_full_report <- downloadHandler(
-    filename = function() {
-      paste("full_analysis_report_", Sys.Date(), ".txt", sep = "")
-    },
-    content = function(file) {
-      data <- working_data()
-      text_content <- paste0(
-        "LAPORAN ANALISIS KERENTANAN SOSIAL INDONESIA\n",
-        "============================================\n\n",
-        "STATISTIK DESKRIPTIF\n",
-        "-\n",
-        paste(capture.output(summary(data)), collapse = "\n"), "\n\n",
-        "INFORMASI DATASET\n",
-        "-\n",
-        "Jumlah observasi: ", nrow(data), "\n",
-        "Jumlah variabel: ", ncol(data), "\n",
-        "Tanggal analisis: ", Sys.Date(), "\n\n",
-        "Sumber: SUSENAS 2017 - BPS Statistics Indonesia\n"
-      )
-      writeLines(text_content, file)
-    }
-  )
+  }
+)
 }
